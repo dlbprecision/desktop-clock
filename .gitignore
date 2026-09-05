@@ -1,0 +1,3 @@
+# Build output — attach the .exe to a GitHub Release instead of committing it
+*.exe
+*.pdb
