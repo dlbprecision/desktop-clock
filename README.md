@@ -2,8 +2,10 @@
 
 A transparent, resizable digital clock widget for Windows 11, in Chevrolet Rapid Blue.
 
+![Chevy Clock on the desktop](screenshot.png)
+
 No installer, no runtime to ship, no dependencies — it compiles with the C# compiler that is
-already inside Windows and produces a single ~18 KB `.exe`.
+already inside Windows and produces a single ~19 KB `.exe`.
 
 - **16 MB** working set, **0.00% CPU** at idle (it sleeps between ticks and wakes aligned to the
   second boundary, so it never drifts and never busy-loops)
@@ -11,9 +13,16 @@ already inside Windows and produces a single ~18 KB `.exe`.
 - Always on top, hidden from Alt+Tab and the taskbar
 - Remembers its exact position and size across restarts and reboots
 
+## Download
+
+Grab `ChevyClock.exe` from the [latest release](../../releases/latest), drop it in a folder it
+can live in permanently, and double-click it. It registers itself to start with Windows on that
+first run. The `.exe` is not code-signed, so SmartScreen will show "Windows protected your PC"
+the first time — click **More info → Run anyway**.
+
 ## Build
 
-Clone the repo, then:
+Or build it yourself. Clone the repo, then:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
