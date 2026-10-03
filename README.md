@@ -1,17 +1,30 @@
 # Chevy Clock
 
-A transparent, resizable digital clock widget for Windows 11, in Chevrolet Rapid Blue.
+A transparent, resizable digital clock widget for Windows 11, in Chevrolet Rapid Blue, purple, or
+DLB Precision colors.
 
 ![Chevy Clock on the desktop](screenshot.png)
 
 No installer, no runtime to ship, no dependencies — it compiles with the C# compiler that is
-already inside Windows and produces a single ~19 KB `.exe`.
+already inside Windows and produces a single ~22 KB `.exe`.
 
 - **16 MB** working set, **0.00% CPU** at idle (it sleeps between ticks and wakes aligned to the
   second boundary, so it never drifts and never busy-loops)
 - Genuinely transparent background — no black box, no fake-wallpaper trick
 - Always on top, hidden from Alt+Tab and the taskbar
-- Remembers its exact position and size across restarts and reboots
+- Remembers its exact position, size, and color across restarts and reboots
+
+## Colors
+
+![Rapid Blue, Purple, and DLB Precision](colors.png)
+
+Right-click → **Color** to switch. The choice is remembered.
+
+| Color | Value |
+| --- | --- |
+| Rapid Blue | `#2E6BE6` |
+| Purple | `#8B43FF`, the violet from the [DLB Precision](https://www.dlbprecision.com) logo |
+| DLB Precision | `#2DA4F4` → `#4A66F7` → `#7B00FF`, the dlbprecision.com gradient, swept left to right across the whole readout |
 
 ## Download
 
@@ -41,19 +54,21 @@ Windows 10 and 11. Nothing needs to be installed.
 | Move | Drag anywhere on the clock |
 | Resize | Scroll wheel over it, or drag any edge or corner |
 | Resize precisely | Right-click → Bigger / Smaller / Reset size |
+| Change color | Right-click → Color → Rapid Blue / Purple / DLB Precision |
 | Freeze it | Right-click → Lock position |
 | Start with Windows | Right-click → Start with Windows |
 | Quit | Right-click → Exit |
 
-The window is invisible apart from the digits, so a faint blue outline fades in when you hover
-over it to show you where the draggable edges are. The aspect ratio is locked while resizing, so
-dragging any edge scales the whole readout — it can never be squashed out of proportion.
+The window is invisible apart from the digits, so a faint outline in the clock's color appears
+when you hover over it to show you where the draggable edges are. The aspect ratio is locked
+while resizing, so dragging any edge scales the whole readout — it can never be squashed out of
+proportion.
 
 ## Where state lives
 
 | What | Where |
 | --- | --- |
-| Position, size, lock state | `%APPDATA%\ChevyClock\settings.ini` |
+| Position, size, color, lock state | `%APPDATA%\ChevyClock\settings.ini` |
 | Start-with-Windows entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` → `ChevyClock` |
 
 Settings are written ~0.7 s after you stop dragging, and again on exit and on Windows shutdown.
@@ -68,16 +83,17 @@ removed. So running the `.exe` once is enough to install it.
 
 ## Uninstall
 
-Right-click → **Exit**, right-click → untick **Start with Windows**, then delete the folder and
+Right-click → untick **Start with Windows**, right-click → **Exit**, then delete the folder and
 `%APPDATA%\ChevyClock`.
 
-## Customising
+## Customizing
 
 Everything worth changing is at the top of [`ChevyClock.cs`](ChevyClock.cs):
 
 | Constant | Does |
 | --- | --- |
-| `RapidBlue` | The colour. Currently `#2E6BE6` |
+| `Themes` | The entries in the Color menu: name, digit brush, hover-outline tint. Add a row to add a color |
+| `RapidBlue`, `LogoViolet`, `DlbSky` / `DlbBlue` / `DlbViolet` | The color values those entries use |
 | `GRIP` | Width of the drag-to-resize band, in pixels |
 | `STEP` | How much one wheel notch grows the clock |
 | `MIN_W` / `MAX_W` | Size limits |

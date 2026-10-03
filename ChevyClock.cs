@@ -1,6 +1,6 @@
-// Chevy Rapid Blue desktop clock widget for Windows 11.
+// Desktop clock widget for Windows 11 in Chevy Rapid Blue, purple, or DLB Precision colors.
 // Transparent rectangular always-on-top widget: drag to move, drag edges to resize,
-// right-click for options. Remembers position/size in %APPDATA%\ChevyClock\settings.ini.
+// right-click for options. Remembers position/size/color in %APPDATA%\ChevyClock\settings.ini.
 
 using System;
 using System.Globalization;
@@ -48,6 +48,50 @@ namespace ChevyClock
 
         // ---------- look ----------
         static readonly Color RapidBlue = Color.FromRgb(0x2E, 0x6B, 0xE6);
+        // DLB Precision palette: the dlbprecision.com hero gradient, plus the logo's violet for the
+        // solid purple. The gradient's own #7B00FF end is too dim as a full digit color on a dark
+        // wallpaper; #8B43FF matches Rapid Blue's contrast on both dark and light backgrounds.
+        static readonly Color DlbSky = Color.FromRgb(0x2D, 0xA4, 0xF4);
+        static readonly Color DlbBlue = Color.FromRgb(0x4A, 0x66, 0xF7);
+        static readonly Color DlbViolet = Color.FromRgb(0x7B, 0x00, 0xFF);
+        static readonly Color LogoViolet = Color.FromRgb(0x8B, 0x43, 0xFF);
+
+        class Theme
+        {
+            public string Key, Name;
+            public Color Edge;                   // tint of the hover outline
+            public Func<double, Brush> Fill;     // digit brush, given the reserved readout width
+        }
+
+        static readonly Theme[] Themes =
+        {
+            new Theme { Key = "rapid", Name = "Rapid Blue", Edge = RapidBlue, Fill = w => Solid(RapidBlue) },
+            new Theme { Key = "purple", Name = "Purple", Edge = LogoViolet, Fill = w => Solid(LogoViolet) },
+            new Theme { Key = "dlb", Name = "DLB Precision", Edge = DlbBlue, Fill = DlbGradient },
+        };
+
+        static Brush Solid(Color c)
+        {
+            SolidColorBrush b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        // One continuous sweep across the reserved readout width: a given position keeps its color
+        // as the digits change, and AM/PM continues the sweep instead of restarting it.
+        static Brush DlbGradient(double width)
+        {
+            LinearGradientBrush b = new LinearGradientBrush();
+            b.MappingMode = BrushMappingMode.Absolute;
+            b.StartPoint = new Point(0, 0);
+            b.EndPoint = new Point(width, 0);
+            b.GradientStops.Add(new GradientStop(DlbSky, 0.0));
+            b.GradientStops.Add(new GradientStop(DlbBlue, 0.44));
+            b.GradientStops.Add(new GradientStop(DlbViolet, 1.0));
+            b.Freeze();
+            return b;
+        }
+
         const int GRIP = 10;                 // resize grab band, pixels
         const double DEF_W = 340;
         const double MIN_W = 130, MAX_W = 3000;
@@ -69,8 +113,10 @@ namespace ChevyClock
         readonly DispatcherTimer tick = new DispatcherTimer(DispatcherPriority.Normal);
         readonly DispatcherTimer saveDebounce = new DispatcherTimer();
         readonly DispatcherTimer replace = new DispatcherTimer(DispatcherPriority.Background);
-        static readonly Brush HoverEdge = new SolidColorBrush(Color.FromArgb(0x70, 0x2E, 0x6B, 0xE6));
-        MenuItem lockItem, startupItem;
+        MenuItem lockItem, startupItem, colorItem;
+        Theme theme = Themes[0];
+        Brush hoverEdge = Brushes.Transparent;
+        double readoutWidth;                 // width reserved for the widest reading; the gradient spans it
         double aspect = 3.0;                 // width : height of the readout, held while resizing
         // "Home" is where the user last put the clock. Only a user action (drag, edge resize,
         // wheel, menu) changes it. Windows shoving the window around when a monitor drops out,
@@ -105,7 +151,7 @@ namespace ChevyClock
 
             MouseLeftButtonDown += OnLeftDown;
             MouseWheel += OnWheel;
-            MouseEnter += delegate { frame.BorderBrush = locked ? Brushes.Transparent : HoverEdge; };
+            MouseEnter += delegate { frame.BorderBrush = locked ? Brushes.Transparent : hoverEdge; };
             MouseLeave += delegate { frame.BorderBrush = Brushes.Transparent; };
 
             tick.Tick += OnTick;
@@ -118,7 +164,6 @@ namespace ChevyClock
             text.FontFamily = new FontFamily("Segoe UI");
             text.FontWeight = FontWeights.Light;
             text.FontSize = 100;
-            text.Foreground = new SolidColorBrush(RapidBlue);
             text.Effect = new DropShadowEffect
             {
                 Color = Colors.Black,
@@ -131,13 +176,23 @@ namespace ChevyClock
             text.Inlines.Add(timeRun);
             text.Inlines.Add(ampmRun);
 
-            // Reserve the width of the widest possible reading ("10:00:00 PM") so the Viewbox
-            // scale never changes -- otherwise the digits would jump in size at 10:00 and 1:00.
-            timeRun.Text = "10:00:00"; ampmRun.Text = " PM";
-            text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Size widest = text.DesiredSize;
+            // Reserve the width of the widest possible reading so the Viewbox scale never changes
+            // -- otherwise the digits would jump in size at 10:00 and 1:00. Segoe UI digits are
+            // tabular, but "AM" and "PM" are not the same width, so measure both.
+            Size widest = new Size(0, 0);
+            foreach (string half in new[] { " AM", " PM" })
+            {
+                timeRun.Text = "10:00:00"; ampmRun.Text = half;
+                text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                widest = new Size(Math.Max(widest.Width, text.DesiredSize.Width),
+                                  Math.Max(widest.Height, text.DesiredSize.Height));
+            }
+            readoutWidth = widest.Width;
 
-            text.HorizontalAlignment = HorizontalAlignment.Center;
+            // Fill the reserved width and center the text within it, so a gradient laid across
+            // that width stays put while the digits change.
+            text.HorizontalAlignment = HorizontalAlignment.Stretch;
+            text.TextAlignment = TextAlignment.Center;
             text.VerticalAlignment = VerticalAlignment.Center;
             holder.Width = widest.Width;
             holder.Height = widest.Height;
@@ -209,12 +264,23 @@ namespace ChevyClock
             MenuItem reset = new MenuItem { Header = "Reset size" };
             reset.Click += delegate { SetWidth(DEF_W); };
 
+            colorItem = new MenuItem { Header = "Color" };
+            foreach (Theme t in Themes)
+            {
+                Theme pick = t;
+                MenuItem mi = new MenuItem { Header = t.Name, Tag = t, IsCheckable = true };
+                mi.Click += delegate { ApplyTheme(pick); Save(); };
+                colorItem.Items.Add(mi);
+            }
+
             MenuItem quit = new MenuItem { Header = "Exit" };
             quit.Click += delegate { Close(); };
 
             menu.Items.Add(bigger);
             menu.Items.Add(smaller);
             menu.Items.Add(reset);
+            menu.Items.Add(new Separator());
+            menu.Items.Add(colorItem);
             menu.Items.Add(new Separator());
             menu.Items.Add(lockItem);
             menu.Items.Add(startupItem);
@@ -227,6 +293,17 @@ namespace ChevyClock
         {
             Cursor = locked ? Cursors.Arrow : Cursors.SizeAll;
             if (locked) frame.BorderBrush = Brushes.Transparent;
+        }
+
+        void ApplyTheme(Theme t)
+        {
+            theme = t;
+            text.Foreground = t.Fill(readoutWidth);
+            hoverEdge = Solid(Color.FromArgb(0x70, t.Edge.R, t.Edge.G, t.Edge.B));
+            if (IsMouseOver && !locked) frame.BorderBrush = hoverEdge;
+            // Set every item explicitly: clicking a checkable item toggles it, which would otherwise
+            // let a second click on the current color uncheck it.
+            foreach (MenuItem mi in colorItem.Items) mi.IsChecked = mi.Tag == t;
         }
 
         // ---------- clock ----------
@@ -404,6 +481,7 @@ namespace ChevyClock
         void LoadSettings()
         {
             double l = double.NaN, t = double.NaN, w = double.NaN, h = double.NaN;
+            string themeKey = null;
             try
             {
                 if (File.Exists(SettingsPath))
@@ -414,6 +492,7 @@ namespace ChevyClock
                         if (eq <= 0) continue;
                         string k = line.Substring(0, eq).Trim().ToLowerInvariant();
                         string v = line.Substring(eq + 1).Trim();
+                        if (k == "theme") { themeKey = v; continue; }
                         double d;
                         if (!double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out d)) continue;
                         if (k == "left") l = d;
@@ -438,6 +517,11 @@ namespace ChevyClock
 
             lockItem.IsChecked = locked;
             ApplyLock();
+
+            Theme saved = Themes[0];             // missing or unknown theme: Rapid Blue
+            foreach (Theme th in Themes)
+                if (string.Equals(th.Key, themeKey, StringComparison.OrdinalIgnoreCase)) saved = th;
+            ApplyTheme(saved);
         }
 
         static double Clamp(double v, double lo, double hi)
@@ -463,8 +547,8 @@ namespace ChevyClock
                 string dir = Path.GetDirectoryName(SettingsPath);
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 File.WriteAllText(SettingsPath, string.Format(CultureInfo.InvariantCulture,
-                    "left={0:0.##}\r\ntop={1:0.##}\r\nwidth={2:0.##}\r\nheight={3:0.##}\r\nlocked={4}\r\nstartup={5}\r\n",
-                    homeL, homeT, homeW, homeW / aspect, locked ? 1 : 0, startup ? 1 : 0));
+                    "left={0:0.##}\r\ntop={1:0.##}\r\nwidth={2:0.##}\r\nheight={3:0.##}\r\nlocked={4}\r\nstartup={5}\r\ntheme={6}\r\n",
+                    homeL, homeT, homeW, homeW / aspect, locked ? 1 : 0, startup ? 1 : 0, theme.Key));
             }
             catch { }
         }
