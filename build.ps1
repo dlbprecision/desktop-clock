@@ -1,4 +1,4 @@
-# Builds ChevyClock.exe with the C# compiler that ships inside Windows.
+# Builds DlbPrecision.DesktopClock.exe with the C# compiler that ships inside Windows.
 # Nothing to install. Run:  powershell -ExecutionPolicy Bypass -File .\build.ps1
 param([switch]$NoStartup, [switch]$NoLaunch)
 
@@ -19,10 +19,13 @@ foreach ($dll in $need) {
     $refs += "/r:$p"
 }
 
-$src = Join-Path $root 'ChevyClock.cs'
-$out = Join-Path $root 'ChevyClock.exe'
+$src = Join-Path $root 'DesktopClock.cs'
+$out = Join-Path $root 'DlbPrecision.DesktopClock.exe'
 
-Get-Process -Name 'ChevyClock' -ErrorAction SilentlyContinue | Stop-Process -Force
+# Stop only a clock running from the file about to be replaced, never an installed copy elsewhere.
+Get-Process -Name 'DlbPrecision.DesktopClock' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and [string]::Equals($_.Path, $out, [StringComparison]::OrdinalIgnoreCase) } |
+    Stop-Process -Force
 & $csc /nologo /target:winexe /platform:anycpu /optimize+ /warn:1 "/out:$out" $refs $src
 if ($LASTEXITCODE -ne 0) { throw "Compile failed (exit $LASTEXITCODE)" }
 "Built $out  ({0:N0} KB)" -f ((Get-Item $out).Length / 1KB)

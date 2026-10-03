@@ -1,9 +1,9 @@
-# Chevy Clock
+# DLB Precision Desktop Clock
 
 A transparent, resizable digital clock widget for Windows 11, in Chevrolet Rapid Blue, purple, or
 DLB Precision colors.
 
-![Chevy Clock on the desktop](screenshot.png)
+![DLB Precision Desktop Clock on the desktop](screenshot.png)
 
 No installer, no runtime to ship, no dependencies — it compiles with the C# compiler that is
 already inside Windows and produces a single ~22 KB `.exe`.
@@ -28,7 +28,7 @@ Right-click → **Color** to switch. The choice is remembered.
 
 ## Download
 
-Grab `ChevyClock.exe` from the [latest release](../../releases/latest), drop it in a folder it
+Grab `DlbPrecision.DesktopClock.exe` from the [latest release](../../releases/latest), drop it in a folder it
 can live in permanently, and double-click it. It registers itself to start with Windows on that
 first run. The `.exe` is not code-signed, so SmartScreen will show "Windows protected your PC"
 the first time — click **More info → Run anyway**.
@@ -41,7 +41,7 @@ Or build it yourself. Clone the repo, then:
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-That compiles `ChevyClock.exe` next to the script, registers it to start with Windows, and
+That compiles `DlbPrecision.DesktopClock.exe` next to the script, registers it to start with Windows, and
 launches it. Flags: `-NoStartup` skips the startup registration, `-NoLaunch` skips launching.
 
 The build uses `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, which ships with
@@ -88,7 +88,7 @@ Right-click → untick **Start with Windows**, right-click → **Exit**, then de
 
 ## Customizing
 
-Everything worth changing is at the top of [`ChevyClock.cs`](ChevyClock.cs):
+Everything worth changing is at the top of [`DesktopClock.cs`](DesktopClock.cs):
 
 | Constant | Does |
 | --- | --- |

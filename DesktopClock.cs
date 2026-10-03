@@ -1,6 +1,6 @@
-// Desktop clock widget for Windows 11 in Chevy Rapid Blue, purple, or DLB Precision colors.
-// Transparent rectangular always-on-top widget: drag to move, drag edges to resize,
-// right-click for options. Remembers position/size/color in %APPDATA%\ChevyClock\settings.ini.
+// DLB Precision Desktop Clock: a transparent, rectangular, always-on-top clock widget for Windows 11
+// in Rapid Blue, purple, or DLB Precision colors. Drag to move, drag edges to resize, right-click for
+// options. Remembers position/size/color in %APPDATA%\ChevyClock\settings.ini.
 
 using System;
 using System.Globalization;
@@ -18,7 +18,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using Microsoft.Win32;
 
-namespace ChevyClock
+namespace DlbPrecision.DesktopClock
 {
     public class ClockWindow : Window
     {
@@ -129,7 +129,7 @@ namespace ChevyClock
 
         public ClockWindow()
         {
-            Title = "Chevy Clock";
+            Title = "DLB Precision Desktop Clock";
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
             Background = Brushes.Transparent;   // transparent, but still catches the mouse
@@ -623,7 +623,7 @@ namespace ChevyClock
         public static void Main()
         {
             bool fresh;
-            using (Mutex one = new Mutex(true, "ChevyClockWidget.SingleInstance", out fresh))
+            using (Mutex one = new Mutex(true, "DLBPrecision.DesktopClock.Widget", out fresh))
             {
                 if (!fresh) return;                 // already running (e.g. launched twice at login)
                 Application app = new Application();
