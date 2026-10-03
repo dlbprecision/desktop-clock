@@ -77,9 +77,9 @@ namespace ChevyClock
             return b;
         }
 
-        // One continuous sweep from the first digit to the end of AM/PM, with the last quarter solid
-        // violet. Absolute, not relative, mapping: AM/PM is a separate run, and a relative brush
-        // would restart the sweep on it.
+        // One continuous sweep from the first digit to the end of AM/PM: sky blue to blue, then
+        // solid violet from the middle on. Absolute, not relative, mapping: AM/PM is a separate
+        // run, and a relative brush would restart the sweep on it.
         static Brush DlbGradient(double width)
         {
             LinearGradientBrush b = new LinearGradientBrush();
@@ -87,8 +87,8 @@ namespace ChevyClock
             b.StartPoint = new Point(0, 0);
             b.EndPoint = new Point(width, 0);
             b.GradientStops.Add(new GradientStop(DlbSky, 0.0));
-            b.GradientStops.Add(new GradientStop(DlbBlue, 0.30));
-            b.GradientStops.Add(new GradientStop(DlbViolet, 0.75));
+            b.GradientStops.Add(new GradientStop(DlbBlue, 0.22));
+            b.GradientStops.Add(new GradientStop(DlbViolet, 0.55));
             b.GradientStops.Add(new GradientStop(DlbViolet, 1.0));
             b.Freeze();
             return b;
