@@ -41,8 +41,9 @@ Or build it yourself. Clone the repo, then:
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-That compiles `DlbPrecision.DesktopClock.exe` next to the script, registers it to start with Windows, and
-launches it. Flags: `-NoStartup` skips the startup registration, `-NoLaunch` skips launching.
+That compiles `DlbPrecision.DesktopClock.exe` next to the script and starts it; the clock adds
+itself to Start with Windows when it runs. `-NoLaunch` builds without starting it. The version
+comes from the `VERSION` file; tests run with `.\test.ps1`.
 
 The build uses `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, which ships with
 Windows 10 and 11. Nothing needs to be installed.
@@ -68,8 +69,8 @@ proportion.
 
 | What | Where |
 | --- | --- |
-| Position, size, color, lock state | `%APPDATA%\ChevyClock\settings.ini` |
-| Start-with-Windows entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` → `ChevyClock` |
+| Position, size, color, lock state | `%LOCALAPPDATA%\DLBPrecision\DesktopClock\settings.ini` |
+| Start-with-Windows entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` → `DLBPrecisionDesktopClock` |
 
 Settings are written ~0.7 s after you stop dragging, and again on exit and on Windows shutdown.
 Only *your* moves count: if Windows shoves the window onto another screen because a monitor
@@ -84,7 +85,8 @@ removed. So running the `.exe` once is enough to install it.
 ## Uninstall
 
 Right-click → untick **Start with Windows**, right-click → **Exit**, then delete the folder and
-`%APPDATA%\ChevyClock`.
+`%LOCALAPPDATA%\DLBPrecision\DesktopClock` (and `%APPDATA%\ChevyClock`, if it's left over from
+Chevy Clock 1.2 or older).
 
 ## Customizing
 

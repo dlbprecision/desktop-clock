@@ -1,39 +1,41 @@
-# Builds DlbPrecision.DesktopClock.exe with the C# compiler that ships inside Windows.
-# Nothing to install. Run:  powershell -ExecutionPolicy Bypass -File .\build.ps1
-param([switch]$NoStartup, [switch]$NoLaunch)
+# Builds DlbPrecision.DesktopClock.exe with the C# compiler that ships inside Windows. Nothing to install.
+#   powershell -ExecutionPolicy Bypass -File .\build.ps1             build next to this script, then start it
+#   ... -NoLaunch                                                   build only
+#   ... -Version 1.2.9.9 -TestBuild -OutputDirectory <folder>       a local test build that can never be a release
+# The clock adds itself to Start with Windows when it runs; the build no longer touches the registry.
+param(
+    [string]$Version,
+    [switch]$TestBuild,
+    [string]$OutputDirectory,
+    [switch]$NoLaunch
+)
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-$fw   = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
-if (-not (Test-Path $fw)) { $fw = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319' }
-$csc  = Join-Path $fw 'csc.exe'
-if (-not (Test-Path $csc)) { throw "C# compiler not found at $csc" }
+. (Join-Path $root 'scripts\BuildCommon.ps1')
 
-# WPF assemblies live in the WPF subfolder; the rest sit in the framework root.
-$need = 'System.dll','System.Core.dll','System.Xaml.dll','WindowsBase.dll','PresentationCore.dll','PresentationFramework.dll'
-$refs = @()
-foreach ($dll in $need) {
-    $p = Join-Path $fw $dll
-    if (-not (Test-Path $p)) { $p = Join-Path $fw "WPF\$dll" }
-    if (-not (Test-Path $p)) { throw "Missing reference assembly: $dll" }
-    $refs += "/r:$p"
+if (-not $Version) { $Version = (Get-Content (Join-Path $root 'VERSION') -TotalCount 1).Trim() }
+if (-not (Test-ClockVersion $Version $TestBuild.IsPresent)) {
+    if ($TestBuild) { throw "A test build needs a four-part version such as 1.2.9.9, not '$Version'." }
+    throw "Release versions are MAJOR.MINOR.PATCH, not '$Version'. Use -TestBuild for a four-part test version."
 }
+$inPlace = -not $OutputDirectory
+if ($inPlace) { $OutputDirectory = $root }
+New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
+$out = Join-Path (Resolve-Path $OutputDirectory).Path 'DlbPrecision.DesktopClock.exe'
 
-$src = Join-Path $root 'DesktopClock.cs'
-$out = Join-Path $root 'DlbPrecision.DesktopClock.exe'
+$fw = Get-FrameworkDir
+$versionFile = Join-Path $root 'obj\AppVersion.g.cs'
+Write-VersionFile $versionFile $Version
+$sources = @(Get-ProductSources $root) + $versionFile
 
 # Stop only a clock running from the file about to be replaced, never an installed copy elsewhere.
 Get-Process -Name 'DlbPrecision.DesktopClock' -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -and [string]::Equals($_.Path, $out, [StringComparison]::OrdinalIgnoreCase) } |
     Stop-Process -Force
-& $csc /nologo /target:winexe /platform:anycpu /optimize+ /warn:1 "/out:$out" $refs $src
+
+& (Join-Path $fw 'csc.exe') /nologo /target:winexe /platform:anycpu /optimize+ /warn:4 /warnaserror+ "/out:$out" @(Get-CompilerReferences $fw) $sources
 if ($LASTEXITCODE -ne 0) { throw "Compile failed (exit $LASTEXITCODE)" }
-"Built $out  ({0:N0} KB)" -f ((Get-Item $out).Length / 1KB)
+"Built $out  ($Version, {0:N0} KB)" -f ((Get-Item $out).Length / 1KB)
 
-if (-not $NoStartup) {
-    $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-    New-ItemProperty -Path $run -Name 'ChevyClock' -Value "`"$out`"" -PropertyType String -Force | Out-Null
-    "Registered to start with Windows (HKCU Run key 'ChevyClock')."
-}
-
-if (-not $NoLaunch) { Start-Process $out; "Launched." }
+if ($inPlace -and -not $NoLaunch) { Start-Process $out; "Launched." }

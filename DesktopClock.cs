@@ -1,6 +1,6 @@
 // DLB Precision Desktop Clock: a transparent, rectangular, always-on-top clock widget for Windows 11
 // in Rapid Blue, purple, or DLB Precision colors. Drag to move, drag edges to resize, right-click for
-// options. Remembers position/size/color in %APPDATA%\ChevyClock\settings.ini.
+// options. Remembers position/size/color in %LOCALAPPDATA%\DLBPrecision\DesktopClock\settings.ini.
 
 using System;
 using System.Globalization;
@@ -101,11 +101,12 @@ namespace DlbPrecision.DesktopClock
 
         // ---------- startup registration ----------
         const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string RunValueName = "ChevyClock";
+        internal const string RunValueName = "DLBPrecisionDesktopClock";
 
-        static readonly string SettingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "ChevyClock", "settings.ini");
+        // Window positions belong to this PC's monitors, so settings are local rather than roaming.
+        internal static readonly string SettingsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DLBPrecision", "DesktopClock", "settings.ini");
 
         readonly TextBlock text = new TextBlock();
         readonly Run timeRun = new Run("12:00:00");
@@ -626,6 +627,7 @@ namespace DlbPrecision.DesktopClock
             using (Mutex one = new Mutex(true, "DLBPrecision.DesktopClock.Widget", out fresh))
             {
                 if (!fresh) return;                 // already running (e.g. launched twice at login)
+                LegacyMigration.Run(SettingsPath);  // before loading settings, so Chevy Clock's carry over
                 Application app = new Application();
                 app.ShutdownMode = ShutdownMode.OnLastWindowClose;
                 app.Run(new ClockWindow());
