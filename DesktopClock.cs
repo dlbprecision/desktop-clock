@@ -3,6 +3,7 @@
 // options. Remembers position/size/color in %LOCALAPPDATA%\DLBPrecision\DesktopClock\settings.ini.
 
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -136,6 +137,7 @@ namespace DlbPrecision.DesktopClock
             Background = Brushes.Transparent;   // transparent, but still catches the mouse
             ResizeMode = ResizeMode.CanResize;  // keeps the sizing frame; we hit-test it ourselves
             ShowInTaskbar = false;
+            ShowActivated = false;              // starting at sign-in or after an update never steals focus
             Topmost = true;
             WindowStartupLocation = WindowStartupLocation.Manual;
             UseLayoutRounding = true;
@@ -160,6 +162,19 @@ namespace DlbPrecision.DesktopClock
             tick.Tick += OnTick;
             UpdateTime();
             Schedule();
+
+            // After an update the previous version stays behind as <exe>.old until the updater, which runs from
+            // it, has exited. Try again shortly after starting.
+            DispatcherTimer tidy = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            tidy.Tick += delegate { tidy.Stop(); DeleteUpdateBackup(); };
+            tidy.Start();
+        }
+
+        static void DeleteUpdateBackup()
+        {
+            try { File.Delete(ExePath() + ".old"); }
+            catch (IOException) { /* Still in use; the next start or update removes it. */ }
+            catch (UnauthorizedAccessException) { }
         }
 
         void BuildContent()
@@ -281,6 +296,14 @@ namespace DlbPrecision.DesktopClock
                 colorItem.Items.Add(mi);
             }
 
+            MenuItem version = new MenuItem { Header = "Version " + Updater.UpdaterProgram.VersionText(Assembly.GetEntryAssembly().GetName().Version), IsEnabled = false };
+            MenuItem update = new MenuItem { Header = "Check for updates…" };
+            update.Click += delegate
+            {
+                string problem = UpdateLauncher.Start(ExePath(), delegate(ProcessStartInfo info) { using (Process.Start(info)) { } });
+                if (problem != null) MessageBox.Show(problem, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            };
+
             MenuItem quit = new MenuItem { Header = "Exit" };
             quit.Click += delegate { Close(); };
 
@@ -292,6 +315,9 @@ namespace DlbPrecision.DesktopClock
             menu.Items.Add(new Separator());
             menu.Items.Add(lockItem);
             menu.Items.Add(startupItem);
+            menu.Items.Add(new Separator());
+            menu.Items.Add(version);
+            menu.Items.Add(update);
             menu.Items.Add(new Separator());
             menu.Items.Add(quit);
             ContextMenu = menu;
@@ -621,17 +647,37 @@ namespace DlbPrecision.DesktopClock
         }
 
         [STAThread]
-        public static void Main()
+        public static int Main(string[] args)
         {
+            if (Updater.UpdaterProgram.IsUpdaterCommand(args)) return Updater.UpdaterProgram.Run(args);
             bool fresh;
             using (Mutex one = new Mutex(true, "DLBPrecision.DesktopClock.Widget", out fresh))
             {
-                if (!fresh) return;                 // already running (e.g. launched twice at login)
+                if (!fresh) return 0;               // already running (e.g. launched twice at login)
                 LegacyMigration.Run(SettingsPath);  // before loading settings, so Chevy Clock's carry over
+                DeleteUpdateBackup();
                 Application app = new Application();
                 app.ShutdownMode = ShutdownMode.OnLastWindowClose;
                 app.Run(new ClockWindow());
                 GC.KeepAlive(one);
+            }
+            return 0;
+        }
+    }
+
+    // The clock only starts the updater; all internet, download and install work happens in that separate process.
+    internal static class UpdateLauncher
+    {
+        public static string Start(string exe, Action<ProcessStartInfo> start)
+        {
+            try
+            {
+                start(new ProcessStartInfo(exe, "--update") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) });
+                return null;
+            }
+            catch (System.ComponentModel.Win32Exception error)
+            {
+                return "The updater could not start: " + error.Message;
             }
         }
     }
