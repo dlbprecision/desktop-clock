@@ -59,7 +59,7 @@ namespace DlbPrecision.DesktopClock.Tests
         public TestContext(string fakeClock)
         {
             FakeClock = fakeClock;
-            Scratch =Path.Combine(Path.GetTempPath(), "DLBPrecision-DesktopClock-Tests-" + Guid.NewGuid().ToString("N"));
+            Scratch = Path.Combine(Path.GetTempPath(), "DLBPrecision-DesktopClock-Tests-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Scratch);
         }
 

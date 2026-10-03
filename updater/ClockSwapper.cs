@@ -5,7 +5,7 @@ using System.Threading;
 
 namespace DlbPrecision.DesktopClock.Updater
 {
-    internal enum SwapOutcome { Updated, RolledBack, RollbackFailed, NotReplaced }
+    internal enum SwapOutcome { Updated, RolledBack, NotReplaced, NotRestored }
 
     internal sealed class SwapResult
     {
@@ -53,6 +53,7 @@ namespace DlbPrecision.DesktopClock.Updater
             string problem = Rename(exe, fresh, backup);
             if (problem != null)
             {
+                if (!File.Exists(exe)) return NotRestored("Couldn't replace the clock (" + problem.TrimEnd('.') + ").", exe, backup);
                 TryDelete(fresh);
                 if (wasRunning) Start(exe);
                 return new SwapResult(SwapOutcome.NotReplaced, "Couldn't replace the clock (" + problem.TrimEnd('.') + "). Nothing was changed.");
@@ -70,12 +71,18 @@ namespace DlbPrecision.DesktopClock.Updater
             Stop(started);
             problem = Rename(exe, backup, fresh);
             if (problem != null)
-                return new SwapResult(SwapOutcome.RollbackFailed, "The new version didn't start, and the previous version couldn't be put back ("
-                    + problem.TrimEnd('.') + "). It is saved next to the clock as " + Path.GetFileName(backup) + ".");
+                return NotRestored("The new version didn't start, and the previous version couldn't be put back (" + problem.TrimEnd('.') + ").", exe, backup);
             TryDelete(fresh);
             return new SwapResult(SwapOutcome.RolledBack, Start(exe) != null
                 ? "The new version didn't start, so the previous version was put back."
                 : "The new version didn't start, so the previous version was put back. Start it again from its folder.");
+        }
+
+        // The previous clock is left as <exe>.old. Starting a clock deletes that file, so it must be renamed back first.
+        private static SwapResult NotRestored(string what, string exe, string backup)
+        {
+            return new SwapResult(SwapOutcome.NotRestored, what + " Before starting the clock again, rename " + Path.GetFileName(backup)
+                + " to " + Path.GetFileName(exe) + (File.Exists(exe) ? ", replacing the new file." : "."));
         }
 
         // Moves exe aside, then replacement into its place. Returns null, or why it couldn't, after putting exe back.

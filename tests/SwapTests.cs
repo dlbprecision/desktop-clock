@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using DlbPrecision.DesktopClock.Updater;
 
 namespace DlbPrecision.DesktopClock.Tests
@@ -32,6 +33,26 @@ namespace DlbPrecision.DesktopClock.Tests
             result = Swap(s);
             t.Check(result.Outcome == SwapOutcome.RolledBack && Sha256(s.Exe) == s.OldSha && ClocksRunningFrom(s.Exe) == 1,
                 "A new version that never shows a window is stopped and rolled back");
+
+            // If even the rollback can't move the new file aside (held open here without delete sharing, as a scan
+            // might), the previous clock stays as .old and the message says how to restore it before it is deleted.
+            s = Prepare(t, "stuck", "ok", "nowindow", true);
+            string stuckExe = s.Exe;
+            long newLength = new FileInfo(ClockSwapper.NewPath(stuckExe)).Length;
+            FileStream held = null;
+            var holder = new Thread(delegate()
+            {
+                if (TestContext.WaitFor(() => { try { return new FileInfo(stuckExe).Length == newLength; } catch (IOException) { return false; } }, 10000))
+                    held = new FileStream(stuckExe, FileMode.Open, FileAccess.Read, FileShare.Read);
+            });
+            holder.Start();
+            result = Swap(s);
+            holder.Join();
+            if (held != null) held.Dispose();
+            t.Check(result.Outcome == SwapOutcome.NotRestored && held != null
+                && result.Message.Contains("rename DlbPrecision.DesktopClock.exe.old to DlbPrecision.DesktopClock.exe, replacing the new file")
+                && Sha256(s.Exe) == s.NewSha && Sha256(ClockSwapper.OldPath(s.Exe)) == s.OldSha,
+                "A rollback that can't move the new file keeps the previous clock as .old and says how to restore it");
 
             s = Prepare(t, "hang", "hang", "ok", true);
             result = Swap(s);
