@@ -24,7 +24,7 @@ Right-click → **Color** to switch. The choice is remembered.
 | --- | --- |
 | Rapid Blue | `#2E6BE6` |
 | Purple | `#8B43FF`, the violet from the [DLB Precision](https://www.dlbprecision.com) logo |
-| DLB Precision | `#2DA4F4` → `#4A66F7` → `#7B00FF`, the dlbprecision.com gradient, swept left to right across the whole readout |
+| DLB Precision | `#2DA4F4` → `#4A66F7` → `#7B00FF`, the dlbprecision.com gradient, swept from the first digit to the end of AM/PM, with the last quarter in solid violet |
 
 ## Download
 

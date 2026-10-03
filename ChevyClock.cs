@@ -60,7 +60,7 @@ namespace ChevyClock
         {
             public string Key, Name;
             public Color Edge;                   // tint of the hover outline
-            public Func<double, Brush> Fill;     // digit brush, given the reserved readout width
+            public Func<double, Brush> Fill;     // digit brush, given the width of the text it paints
         }
 
         static readonly Theme[] Themes =
@@ -77,8 +77,9 @@ namespace ChevyClock
             return b;
         }
 
-        // One continuous sweep across the reserved readout width: a given position keeps its color
-        // as the digits change, and AM/PM continues the sweep instead of restarting it.
+        // One continuous sweep from the first digit to the end of AM/PM, with the last quarter solid
+        // violet. Absolute, not relative, mapping: AM/PM is a separate run, and a relative brush
+        // would restart the sweep on it.
         static Brush DlbGradient(double width)
         {
             LinearGradientBrush b = new LinearGradientBrush();
@@ -86,7 +87,8 @@ namespace ChevyClock
             b.StartPoint = new Point(0, 0);
             b.EndPoint = new Point(width, 0);
             b.GradientStops.Add(new GradientStop(DlbSky, 0.0));
-            b.GradientStops.Add(new GradientStop(DlbBlue, 0.44));
+            b.GradientStops.Add(new GradientStop(DlbBlue, 0.30));
+            b.GradientStops.Add(new GradientStop(DlbViolet, 0.75));
             b.GradientStops.Add(new GradientStop(DlbViolet, 1.0));
             b.Freeze();
             return b;
@@ -116,7 +118,7 @@ namespace ChevyClock
         MenuItem lockItem, startupItem, colorItem;
         Theme theme = Themes[0];
         Brush hoverEdge = Brushes.Transparent;
-        double readoutWidth;                 // width reserved for the widest reading; the gradient spans it
+        double readoutWidth;                 // width reserved for the widest reading
         double aspect = 3.0;                 // width : height of the readout, held while resizing
         // "Home" is where the user last put the clock. Only a user action (drag, edge resize,
         // wheel, menu) changes it. Windows shoving the window around when a monitor drops out,
@@ -164,6 +166,9 @@ namespace ChevyClock
             text.FontFamily = new FontFamily("Segoe UI");
             text.FontWeight = FontWeights.Light;
             text.FontSize = 100;
+            // Segoe UI Light's default "1" is narrower than the other digits, so the centered
+            // readout slid sideways whenever a 1 came or went. Tabular figures are all one width.
+            Typography.SetNumeralAlignment(text, FontNumeralAlignment.Tabular);
             text.Effect = new DropShadowEffect
             {
                 Color = Colors.Black,
@@ -177,8 +182,9 @@ namespace ChevyClock
             text.Inlines.Add(ampmRun);
 
             // Reserve the width of the widest possible reading so the Viewbox scale never changes
-            // -- otherwise the digits would jump in size at 10:00 and 1:00. Segoe UI digits are
-            // tabular, but "AM" and "PM" are not the same width, so measure both.
+            // -- otherwise the digits would jump in size at 10:00 and 1:00. With tabular figures
+            // every two-digit hour reads the same width, but "AM" is wider than "PM", so measure
+            // both. Layout rounding later rounds the text up to whole pixels; reserve that too.
             Size widest = new Size(0, 0);
             foreach (string half in new[] { " AM", " PM" })
             {
@@ -187,13 +193,14 @@ namespace ChevyClock
                 widest = new Size(Math.Max(widest.Width, text.DesiredSize.Width),
                                   Math.Max(widest.Height, text.DesiredSize.Height));
             }
+            widest = new Size(Math.Ceiling(widest.Width), Math.Ceiling(widest.Height));
             readoutWidth = widest.Width;
 
-            // Fill the reserved width and center the text within it, so a gradient laid across
-            // that width stays put while the digits change.
-            text.HorizontalAlignment = HorizontalAlignment.Stretch;
-            text.TextAlignment = TextAlignment.Center;
+            text.HorizontalAlignment = HorizontalAlignment.Center;
             text.VerticalAlignment = VerticalAlignment.Center;
+            // The digit brush is sized to the text, so a gradient always ends on AM/PM. Rebuild it
+            // when the text's width changes: one- vs two-digit hour, AM vs PM.
+            text.SizeChanged += (s, e) => { if (e.WidthChanged) text.Foreground = theme.Fill(TextWidth()); };
             holder.Width = widest.Width;
             holder.Height = widest.Height;
             holder.Children.Add(text);
@@ -295,10 +302,14 @@ namespace ChevyClock
             if (locked) frame.BorderBrush = Brushes.Transparent;
         }
 
+        // Before the first layout the text has no width yet; the reserved width stands in until
+        // SizeChanged supplies the real one.
+        double TextWidth() { return text.ActualWidth > 0 ? text.ActualWidth : readoutWidth; }
+
         void ApplyTheme(Theme t)
         {
             theme = t;
-            text.Foreground = t.Fill(readoutWidth);
+            text.Foreground = t.Fill(TextWidth());
             hoverEdge = Solid(Color.FromArgb(0x70, t.Edge.R, t.Edge.G, t.Edge.B));
             if (IsMouseOver && !locked) frame.BorderBrush = hoverEdge;
             // Set every item explicitly: clicking a checkable item toggles it, which would otherwise
