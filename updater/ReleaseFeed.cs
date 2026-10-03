@@ -67,10 +67,13 @@ namespace DlbPrecision.DesktopClock.Updater
         private const int TimeoutMilliseconds = 15000;
         private const string Unreadable = "The update information could not be read.";
 
-        // The in-box compiler doesn't stamp a target framework, so .NET would fall back to TLS 1.0, which
-        // GitHub refuses. Let Windows choose instead: TLS 1.2 and 1.3 on Windows 10 and 11.
+        // The in-box compiler doesn't stamp a target framework, so .NET treats the clock as an old app: it offers
+        // only SSL 3 and TLS 1.0, which GitHub refuses, and rejects SystemDefault unless these switches are off.
+        // With them off, Windows chooses (TLS 1.2 and 1.3 on Windows 10 and 11). Must run before any request.
         public static void UseSystemTls()
         {
+            AppContext.SetSwitch("Switch.System.Net.DontEnableSystemDefaultTlsVersions", false);
+            AppContext.SetSwitch("Switch.System.Net.DontEnableSchUseStrongCrypto", false);
             ServicePointManager.SecurityProtocol = SecurityProtocolType.SystemDefault;
         }
 

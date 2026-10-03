@@ -21,6 +21,7 @@ namespace DlbPrecision.DesktopClock.Tests
                 return 100;
             }
             string filter = args.Length > 1 ? args[1] : null;
+            Updater.ReleaseFeed.UseSystemTls();   // as the updater does before any request
             List<MethodInfo> suites = typeof(TestRunner).Assembly.GetTypes()
                 .Where(type => type.Namespace == typeof(TestRunner).Namespace)
                 .Select(type => type.GetMethod("Run", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,

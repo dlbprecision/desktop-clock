@@ -1,6 +1,6 @@
 # Builds and runs the automated tests: the product sources plus tests\*.cs, compiled into tests\bin\Tests.exe
-# with the in-box compiler. Tests never touch the real install, settings or Run key. Nothing is downloaded, but
-# the signature checks ask Windows to confirm certificate revocation, which needs the internet.
+# with the in-box compiler. Tests never touch the real install, settings or Run key. They need the internet:
+# one reads GitHub's release feed, and the signature checks ask Windows to confirm certificate revocation.
 #   powershell -ExecutionPolicy Bypass -File .\test.ps1                run everything
 #   powershell -ExecutionPolicy Bypass -File .\test.ps1 -Only Feed     run suites whose name contains "Feed"
 param([string]$Only)

@@ -130,6 +130,9 @@ namespace DlbPrecision.DesktopClock.Tests
 
         private static void Sources(TestContext t)
         {
+            FeedResult real = ReleaseFeed.Fetch(ReleaseFeed.LatestUrl);
+            t.Check(real.Error == null && real.Release.Tag.StartsWith("v"),
+                "GitHub's real release feed is reached over Windows' TLS (needs the internet): " + (real.Error ?? real.Release.Tag));
             t.Check(ReleaseFeed.Fetch("https://127.0.0.1:1/releases/latest").Error == ReleaseFeed.NetworkMessage,
                 "An unreachable server is a friendly network error");
             t.Check(ReleaseFeed.Fetch("http://127.0.0.1:1/releases/latest").Error.Contains("secure connection"), "Plain HTTP feeds are refused before connecting");
