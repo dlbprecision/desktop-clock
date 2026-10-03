@@ -6,7 +6,8 @@ DLB Precision colors.
 ![DLB Precision Desktop Clock on the desktop](screenshot.png)
 
 No installer, no runtime to ship, no dependencies — it compiles with the C# compiler that is
-already inside Windows and produces a single ~72 KB `.exe`, signed by DLB Precision, LLC.
+already inside Windows and produces a single `.exe` under 100 KB. Releases are signed by
+DLB Precision, LLC.
 
 - **16 MB** working set, **0.00% CPU** at idle (it sleeps between ticks and wakes aligned to the
   second boundary, so it never drifts and never busy-loops)
