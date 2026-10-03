@@ -29,19 +29,19 @@ namespace DlbPrecision.DesktopClock.Tests
             File.WriteAllBytes(source, new byte[] { 77, 90, 1, 2, 3 });
             var local = new Uri(source);
             var copy = new MemoryStream();
-            Downloader.Download(local, copy, 5, true, null, CancellationToken.None, "test");
+            Downloader.Download(local, copy, 5, true, null, CancellationToken.None);
             t.Check(copy.Length == 5, "A local test feed's file is downloaded");
-            t.Check(Fails(() => Downloader.Download(local, new MemoryStream(), 5, false, null, CancellationToken.None, "test"), "local test feed"),
+            t.Check(Fails(() => Downloader.Download(local, new MemoryStream(), 5, false, null, CancellationToken.None), "local test feed"),
                 "Local files are refused outside a local test feed");
-            t.Check(Fails(() => Downloader.Download(new Uri("http://127.0.0.1:1/x.exe"), new MemoryStream(), 5, false, null, CancellationToken.None, "test"), "secure connection"),
+            t.Check(Fails(() => Downloader.Download(new Uri("http://127.0.0.1:1/x.exe"), new MemoryStream(), 5, false, null, CancellationToken.None), "secure connection"),
                 "Plain HTTP is refused");
-            t.Check(Fails(() => Downloader.Download(new Uri("file://server/share/x.exe"), new MemoryStream(), 5, true, null, CancellationToken.None, "test"), "network share"),
+            t.Check(Fails(() => Downloader.Download(new Uri("file://server/share/x.exe"), new MemoryStream(), 5, true, null, CancellationToken.None), "network share"),
                 "Network shares are refused");
 
             var cancelled = new CancellationTokenSource();
             cancelled.Cancel();
             bool stopped = false;
-            try { Downloader.Download(local, new MemoryStream(), 5, true, null, cancelled.Token, "test"); }
+            try { Downloader.Download(local, new MemoryStream(), 5, true, null, cancelled.Token); }
             catch (OperationCanceledException) { stopped = true; }
             t.Check(stopped, "Cancelling stops the download");
         }

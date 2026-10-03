@@ -30,14 +30,14 @@ namespace DlbPrecision.DesktopClock.Tests
             return release;
         }
 
-        private static OfferStatus Status(ReleaseInfo release, Version installed = null, bool prerelease = false, bool files = false, string prefix = null)
+        private static OfferStatus Status(ReleaseInfo release, Version installed = null, bool prerelease = false, bool local = false)
         {
-            return UpdateOffer.Decide(release, installed ?? Installed, prerelease, files, prefix).Status;
+            return UpdateOffer.Decide(release, installed ?? Installed, prerelease, local).Status;
         }
 
         private static void Offers(TestContext t)
         {
-            UpdateDecision newer = UpdateOffer.Decide(Release("v1.3.1"), Installed, false, false, null);
+            UpdateDecision newer = UpdateOffer.Decide(Release("v1.3.1"), Installed, false, false);
             t.Check(newer.Status == OfferStatus.Available && newer.Offer.VersionText == "1.3.1"
                 && newer.Offer.Exe.Name == "DlbPrecision.DesktopClock.exe" && newer.Offer.Checksum.Name == "DlbPrecision.DesktopClock.exe.sha256",
                 "A newer Latest release with both files is offered");
@@ -62,38 +62,44 @@ namespace DlbPrecision.DesktopClock.Tests
             var titled = Release("v1.3.1");
             titled.Name = "v1.3.1";
             titled.Body = "## v1.3.1\n- **Faster** updates";
-            t.Check(UpdateOffer.Decide(titled, Installed, false, false, null).Offer.Notes == "• Faster updates",
+            t.Check(UpdateOffer.Decide(titled, Installed, false, false).Offer.Notes == "• Faster updates",
                 "Notes are plain text and don't repeat the title");
             var untitled = Release("v1.3.1");
             untitled.Name = "";
-            t.Check(UpdateOffer.Decide(untitled, Installed, false, false, null).Offer.Title == "DLB Precision Desktop Clock 1.3.1",
+            t.Check(UpdateOffer.Decide(untitled, Installed, false, false).Offer.Title == "DLB Precision Desktop Clock 1.3.1",
                 "A release without a title gets one");
+            var wordy = Release("v1.3.1");
+            wordy.Name = new string('x', 500);
+            string shortened = UpdateOffer.Decide(wordy, Installed, false, false).Offer.Title;
+            t.Check(shortened.Length == 120 && shortened.EndsWith("…"), "A very long release title is cut, so the window fits on the screen");
         }
 
         private static void Addresses(TestContext t)
         {
             string prefix = ReleaseFeed.DownloadPrefix;
             t.Check(prefix == "https://github.com/dlbprecision/desktop-clock/releases/download/", "The real feed downloads only from DLB's desktop-clock releases");
-            t.Check(Status(Release("v1.3.1"), prefix: prefix) == OfferStatus.Available, "DLB's own release files are accepted");
+            t.Check(Status(Release("v1.3.1")) == OfferStatus.Available, "DLB's own release files are accepted");
             t.Check(Status(Release("v1.3.1", baseUrl: "http://github.com/dlbprecision/desktop-clock/releases/download/v1.3.1/")) == OfferStatus.NotAvailable,
                 "Unencrypted download addresses are refused");
             t.Check(Status(Release("v1.3.1", baseUrl: "file:///C:/feed/v1.3.1/")) == OfferStatus.NotAvailable, "Local files are refused on the real channel");
-            t.Check(Status(Release("v1.3.1", baseUrl: "file:///C:/feed/v1.3.1/"), files: true) == OfferStatus.Available, "A local test feed may use local files");
-            t.Check(Status(Release("v1.3.1", baseUrl: "file://server/share/v1.3.1/"), files: true) == OfferStatus.NotAvailable,
+            t.Check(Status(Release("v1.3.1", baseUrl: "file:///C:/feed/v1.3.1/"), local: true) == OfferStatus.Available, "A local test feed may use local files");
+            t.Check(Status(Release("v1.3.1", baseUrl: "file://server/share/v1.3.1/"), local: true) == OfferStatus.NotAvailable,
                 "Network-share downloads are refused even for a local test feed");
-            t.Check(Status(Release("v1.3.1", baseUrl: "https://example.test/dlbprecision/desktop-clock/releases/download/v1.3.1/"), prefix: prefix) == OfferStatus.NotAvailable,
-                "Another host is refused");
-            t.Check(Status(Release("v1.3.1", baseUrl: prefix + "v1.3.1/../v9.9.9/"), prefix: prefix) == OfferStatus.NotAvailable,
+            t.Check(Status(Release("v1.3.1", baseUrl: "https://example.test/dlbprecision/desktop-clock/releases/download/v1.3.1/")) == OfferStatus.NotAvailable,
+                "Another host is refused, even for a test feed on the internet");
+            t.Check(Status(Release("v1.3.1", baseUrl: "https://example.test/v1.3.1/"), local: true) == OfferStatus.Available,
+                "Only a local test feed may point at another host");
+            t.Check(Status(Release("v1.3.1", baseUrl: prefix + "v1.3.1/../v9.9.9/")) == OfferStatus.NotAvailable,
                 "An address that climbs out of the release with ../ is refused");
-            t.Check(Status(Release("v1.3.1", baseUrl: "https://github.com/DLBPrecision/Desktop-Clock/releases/download/v1.3.1/"), prefix: prefix) == OfferStatus.Available,
+            t.Check(Status(Release("v1.3.1", baseUrl: "https://github.com/DLBPrecision/Desktop-Clock/releases/download/v1.3.1/")) == OfferStatus.Available,
                 "Owner and repository ignore case, as GitHub does");
-            t.Check(Status(Release("v1.3.1", baseUrl: prefix + "V1.3.1/"), prefix: prefix) == OfferStatus.NotAvailable, "The tag in the address must match exactly");
-            t.Check(Status(Release("v1.3.1", urlTag: "v1.3.0"), prefix: prefix) == OfferStatus.NotAvailable, "Files from another release are refused");
-            t.Check(Status(Release("v1.3.1", baseUrl: "https://github.com/dlbprecision/desktop-clock2/releases/download/v1.3.1/"), prefix: prefix) == OfferStatus.NotAvailable,
+            t.Check(Status(Release("v1.3.1", baseUrl: prefix + "V1.3.1/")) == OfferStatus.NotAvailable, "The tag in the address must match exactly");
+            t.Check(Status(Release("v1.3.1", urlTag: "v1.3.0")) == OfferStatus.NotAvailable, "Files from another release are refused");
+            t.Check(Status(Release("v1.3.1", baseUrl: "https://github.com/dlbprecision/desktop-clock2/releases/download/v1.3.1/")) == OfferStatus.NotAvailable,
                 "A repository whose name only starts like DLB's is refused");
             var renamed = Release("v1.3.1");
             renamed.Assets[0].DownloadUrl = prefix + "v1.3.1/dlbprecision.desktopclock.exe";
-            t.Check(Status(renamed, prefix: prefix) == OfferStatus.NotAvailable, "The file name in the address must match exactly");
+            t.Check(Status(renamed) == OfferStatus.NotAvailable, "The file name in the address must match exactly");
         }
 
         private static void Parsing(TestContext t)
@@ -124,17 +130,17 @@ namespace DlbPrecision.DesktopClock.Tests
 
         private static void Sources(TestContext t)
         {
-            t.Check(ReleaseFeed.Fetch("https://127.0.0.1:1/releases/latest", "DLBPrecisionDesktopClock-Updater/test").Error == ReleaseFeed.NetworkMessage,
+            t.Check(ReleaseFeed.Fetch("https://127.0.0.1:1/releases/latest").Error == ReleaseFeed.NetworkMessage,
                 "An unreachable server is a friendly network error");
-            t.Check(ReleaseFeed.Fetch("http://127.0.0.1:1/releases/latest", "x").Error.Contains("secure connection"), "Plain HTTP feeds are refused before connecting");
-            t.Check(ReleaseFeed.Fetch(@"\\server\share\feed.json", "x").Error.Contains("network share"), "A network-share feed is refused without touching the network");
+            t.Check(ReleaseFeed.Fetch("http://127.0.0.1:1/releases/latest").Error.Contains("secure connection"), "Plain HTTP feeds are refused before connecting");
+            t.Check(ReleaseFeed.Fetch(@"\\server\share\feed.json").Error.Contains("network share"), "A network-share feed is refused without touching the network");
 
             string folder = t.NewFolder("feed");
             string file = Path.Combine(folder, "feed.json");
             File.WriteAllText(file, "{\"tag_name\":\"v1.3.1\",\"name\":\"Test\",\"prerelease\":true,\"assets\":[]}");
-            FeedResult local = ReleaseFeed.Fetch(file, "x");
+            FeedResult local = ReleaseFeed.Fetch(file);
             t.Check(local.Error == null && local.Release.Tag == "v1.3.1" && local.Release.Prerelease, "A local test feed file is read");
-            t.Check(ReleaseFeed.Fetch(Path.Combine(folder, "missing.json"), "x").Error.Contains("not found"), "A missing test feed file is reported");
+            t.Check(ReleaseFeed.Fetch(Path.Combine(folder, "missing.json")).Error.Contains("not found"), "A missing test feed file is reported");
             t.Check(ReleaseFeed.IsLocal(file) && !ReleaseFeed.IsLocal(ReleaseFeed.LatestUrl), "Local feeds are told apart from the real one");
         }
 

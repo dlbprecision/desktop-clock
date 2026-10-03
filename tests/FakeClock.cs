@@ -5,6 +5,8 @@
 // Every start appends "<pid> <mode>" to started.txt beside it, and a normal close appends "<pid>" to
 // closed.txt. Windows open far off-screen and never take focus, and every mode exits by itself after two
 // minutes, so a failed test can't leave one behind.
+// "--swap <close ms> <start ms>" instead replaces this exe with <exe>.new the way the updater does, from the
+// clock's own file, and writes the outcome to swap.txt.
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -12,16 +14,23 @@ using System.Reflection;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
+using DlbPrecision.DesktopClock.Updater;
 
 namespace DlbPrecision.DesktopClock.Tests
 {
     internal static class FakeClock
     {
         [STAThread]
-        private static int Main()
+        private static int Main(string[] args)
         {
             string self = Assembly.GetEntryAssembly().Location;
             string folder = Path.GetDirectoryName(self);
+            if (args.Length == 3 && args[0] == "--swap")
+            {
+                var swapper = new ClockSwapper { CloseWaitMilliseconds = int.Parse(args[1]), StartWaitMilliseconds = int.Parse(args[2]) };
+                File.WriteAllText(Path.Combine(folder, "swap.txt"), swapper.Replace(self).Outcome.ToString());
+                return 0;
+            }
             string ownModeFile = Path.Combine(folder, "mode." + new FileInfo(self).Length + ".txt");
             string modeFile = File.Exists(ownModeFile) ? ownModeFile : Path.Combine(folder, "mode.txt");
             string mode = File.Exists(modeFile) ? File.ReadAllText(modeFile).Trim() : "ok";
@@ -37,7 +46,7 @@ namespace DlbPrecision.DesktopClock.Tests
             var app = new Application();
             var window = new Window
             {
-                Title = "DLB Precision Desktop Clock",
+                Title = ClockSwapper.WindowTitle,
                 WindowStyle = WindowStyle.None,
                 ShowInTaskbar = false,
                 ShowActivated = false,

@@ -131,7 +131,7 @@ namespace DlbPrecision.DesktopClock
 
         public ClockWindow()
         {
-            Title = "DLB Precision Desktop Clock";
+            Title = Updater.ClockSwapper.WindowTitle;   // the updater waits for this title after installing
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
             Background = Brushes.Transparent;   // transparent, but still catches the mouse
@@ -170,12 +170,8 @@ namespace DlbPrecision.DesktopClock
             tidy.Start();
         }
 
-        static void DeleteUpdateBackup()
-        {
-            try { File.Delete(ExePath() + ".old"); }
-            catch (IOException) { /* Still in use; the next start or update removes it. */ }
-            catch (UnauthorizedAccessException) { }
-        }
+        // Fails quietly while the updater still runs from it; the next start or update removes it.
+        static void DeleteUpdateBackup() { Updater.ClockSwapper.TryDelete(Updater.ClockSwapper.OldPath(ExePath())); }
 
         void BuildContent()
         {

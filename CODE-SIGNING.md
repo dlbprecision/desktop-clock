@@ -28,6 +28,10 @@ window doesn't appear within 15 seconds, the old file goes back and the old cloc
 Windows lets a running exe be renamed, so the updater (which runs from the clock's own file) needs
 no temporary copy; the new clock deletes `<exe>.old` once the updater has exited.
 
+The checks run on `<exe>.new` while it is open with writes blocked; it is not re-read before the
+swap. That is the same exposure as running any program from your own folder: anything able to change
+the file could just as well replace the installed clock.
+
 ## Signing setup
 
 Signing uses SignTool, the Artifact Signing client library and the account metadata, as in the
@@ -77,7 +81,9 @@ Installed clocks keep the rules they shipped with, so every future release must 
   root;
 - the product name and description `DLB Precision Desktop Clock`, and the clock's window title
   `DLB Precision Desktop Clock`, which the updater waits for after a swap;
-- the `--update [--feed …]` and `--verify-package` arguments.
+- the `--update [--feed …]` and `--verify-package` arguments;
+- deleting `<exe>.old` soon after the clock starts: the updater that installed it ran from that
+  file, so it couldn't delete it itself.
 
 If the publisher identity or signing service ever changes, installed clocks will refuse the new
 signature: publish that release with instructions for a one-time manual update.

@@ -12,7 +12,7 @@ namespace DlbPrecision.DesktopClock.Tests
     {
         public static void Run(TestContext t)
         {
-            var window = new UpdaterWindow(@"C:\nowhere\DlbPrecision.DesktopClock.exe", null, false)
+            var window = new UpdaterWindow(@"C:\nowhere\DlbPrecision.DesktopClock.exe", null)
             {
                 ShowInTaskbar = false,
                 ShowActivated = false,
@@ -35,7 +35,7 @@ namespace DlbPrecision.DesktopClock.Tests
             var release = new ReleaseInfo { Tag = "v1.3.1", Name = "v1.3.1", Body = "## v1.3.1\nAdds a **Color** menu.\n\n- Rapid Blue\n- Purple\n- DLB Precision" };
             release.Assets.Add(new ReleaseAsset { Name = UpdateOffer.ExeName, Size = 61440, DownloadUrl = ReleaseFeed.DownloadPrefix + "v1.3.1/" + UpdateOffer.ExeName });
             release.Assets.Add(new ReleaseAsset { Name = UpdateOffer.ChecksumName, Size = 97, DownloadUrl = ReleaseFeed.DownloadPrefix + "v1.3.1/" + UpdateOffer.ChecksumName });
-            UpdateOffer offer = UpdateOffer.Decide(release, new Version(1, 3, 0, 0), false, false, ReleaseFeed.DownloadPrefix).Offer;
+            UpdateOffer offer = UpdateOffer.Decide(release, new Version(1, 3, 0, 0), false, false).Offer;
             window.ShowAvailable(offer);
             Save(window, previews, "available");
             t.Check(window.Status.Text == "Version 1.3.1 is available" && Visible(window.Notes) && window.Notes.Text.Contains("• Purple")

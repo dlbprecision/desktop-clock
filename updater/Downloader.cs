@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Threading;
 
 namespace DlbPrecision.DesktopClock.Updater
@@ -11,10 +12,11 @@ namespace DlbPrecision.DesktopClock.Updater
         public const long MaximumBytes = 16L * 1024 * 1024;
         // A download that makes no progress for this long is treated as stalled.
         private const int StallTimeoutMilliseconds = 30000;
+        // GitHub sends release files on with one redirect, to its download host.
+        private const int MaximumRedirects = 5;
 
         // Writes the file at source into output. The caller owns output, and deletes it if this throws.
-        public static void Download(Uri source, Stream output, long expectedSize, bool allowFile, Action<long> progress,
-            CancellationToken token, string userAgent)
+        public static void Download(Uri source, Stream output, long expectedSize, bool allowFile, Action<long> progress, CancellationToken token)
         {
             if (source.IsFile && !allowFile) throw new InvalidDataException("Local files can only be used by a local test feed.");
             if (source.IsUnc) throw new InvalidDataException("Updates are never downloaded from a network share.");
@@ -25,11 +27,7 @@ namespace DlbPrecision.DesktopClock.Updater
                     Copy(input, output, expectedSize, MaximumBytes, progress, token);
                 return;
             }
-            var request = (HttpWebRequest)WebRequest.Create(source);
-            request.UserAgent = userAgent;
-            request.Timeout = StallTimeoutMilliseconds;
-            request.ReadWriteTimeout = StallTimeoutMilliseconds;
-            UseSignInForProxy(request);
+            HttpWebRequest request = CreateRequest(source, StallTimeoutMilliseconds);
             try
             {
                 using (token.Register(request.Abort))
@@ -48,10 +46,17 @@ namespace DlbPrecision.DesktopClock.Updater
             }
         }
 
-        // Office networks often require Windows sign-in at the proxy; without it every request fails with 407.
-        internal static void UseSignInForProxy(HttpWebRequest request)
+        // Every request the updater makes: named as GitHub's API asks, with timeouts and few redirects.
+        internal static HttpWebRequest CreateRequest(Uri source, int timeoutMilliseconds)
         {
+            var request = (HttpWebRequest)WebRequest.Create(source);
+            request.UserAgent = "DLBPrecisionDesktopClock-Updater/" + UpdaterProgram.VersionText(Assembly.GetEntryAssembly().GetName().Version);
+            request.Timeout = timeoutMilliseconds;
+            request.ReadWriteTimeout = timeoutMilliseconds;
+            request.MaximumAutomaticRedirections = MaximumRedirects;
+            // Office networks often require Windows sign-in at the proxy; without it every request fails with 407.
             if (request.Proxy != null) request.Proxy.Credentials = CredentialCache.DefaultNetworkCredentials;
+            return request;
         }
 
         public static void Copy(Stream input, Stream output, long expectedSize, long maximumBytes, Action<long> progress, CancellationToken token)

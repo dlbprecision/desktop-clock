@@ -1,5 +1,6 @@
 # Builds and runs the automated tests: the product sources plus tests\*.cs, compiled into tests\bin\Tests.exe
-# with the in-box compiler. No network. Tests never touch the real install, settings or Run key.
+# with the in-box compiler. Tests never touch the real install, settings or Run key. Nothing is downloaded, but
+# the signature checks ask Windows to confirm certificate revocation, which needs the internet.
 #   powershell -ExecutionPolicy Bypass -File .\test.ps1                run everything
 #   powershell -ExecutionPolicy Bypass -File .\test.ps1 -Only Feed     run suites whose name contains "Feed"
 param([string]$Only)
@@ -18,7 +19,8 @@ $versionFile = Join-Path $root 'obj\TestVersion.g.cs'
 Write-VersionFile $versionFile '1.3.0'
 
 $fake = Join-Path $bin 'FakeClock.exe'
-& $csc /nologo /target:winexe /platform:anycpu /warn:4 /warnaserror+ "/out:$fake" $refs (Join-Path $root 'tests\FakeClock.cs')
+$fakeSources = @('tests\FakeClock.cs', 'updater\ClockSwapper.cs', 'NativeMethods.cs') | ForEach-Object { Join-Path $root $_ }
+& $csc /nologo /target:winexe /platform:anycpu /warn:4 /warnaserror+ "/out:$fake" $refs $fakeSources
 if ($LASTEXITCODE -ne 0) { throw "FakeClock compile failed (exit $LASTEXITCODE)" }
 
 $tests = Join-Path $bin 'Tests.exe'

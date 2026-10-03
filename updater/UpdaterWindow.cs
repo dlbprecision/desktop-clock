@@ -28,18 +28,17 @@ namespace DlbPrecision.DesktopClock.Updater
         private readonly string feed;
         private readonly bool localFeed;
         private readonly Version installed = Assembly.GetEntryAssembly().GetName().Version;
-        private readonly string userAgent;
         private Action primaryAction, secondaryAction;
-        private CancellationTokenSource cancel;
-        private bool busy;   // verifying or replacing: can't be interrupted
+        private CancellationTokenSource cancel;   // set while downloading
+        private bool busy;                        // verifying or replacing: can't be interrupted
+        private bool closeWhenStopped;            // closed mid-download: close once the download has stopped
 
         // exe: the clock to update (this process's own file). feed: a test feed, or null for GitHub's latest release.
-        public UpdaterWindow(string exe, string feed, bool startCheck)
+        public UpdaterWindow(string exe, string feed)
         {
             this.exe = exe;
             this.feed = feed;
             localFeed = feed != null && ReleaseFeed.IsLocal(feed);
-            userAgent = "DLBPrecisionDesktopClock-Updater/" + UpdaterProgram.VersionText(installed);
 
             Title = WindowTitle;
             Width = 460;
@@ -87,10 +86,15 @@ namespace DlbPrecision.DesktopClock.Updater
             Closing += delegate(object sender, System.ComponentModel.CancelEventArgs e)
             {
                 if (busy) e.Cancel = true;
-                else if (cancel != null) cancel.Cancel();
+                else if (cancel != null)
+                {
+                    // Stop the download first, so its partial file is removed; UpdateNow then closes the window.
+                    e.Cancel = true;
+                    closeWhenStopped = true;
+                    cancel.Cancel();
+                }
             };
             ShowChecking();
-            if (startCheck) Loaded += delegate { Check(); };
         }
 
         public void ShowChecking() { SetState("Checking for updates…", null, null, false, null, null, "Close", Close); }
@@ -145,18 +149,18 @@ namespace DlbPrecision.DesktopClock.Updater
             ProgressText.Text = Math.Round(done / 1024.0) + " of " + Math.Round(total / 1024.0) + " KB";
         }
 
-        private async void Check()
+        internal async void Check()
         {
             ShowChecking();
             string source = feed ?? ReleaseFeed.LatestUrl;
-            FeedResult result = await Task.Run(() => ReleaseFeed.Fetch(source, userAgent));
+            FeedResult result = await Task.Run(() => ReleaseFeed.Fetch(source));
             if (result.Error != null)
             {
                 ShowError(result.Error, Check);
                 return;
             }
-            // A test feed may offer a pre-release; only a local one may point at local files.
-            UpdateDecision decision = UpdateOffer.Decide(result.Release, installed, feed != null, localFeed, localFeed ? null : ReleaseFeed.DownloadPrefix);
+            // A test feed may offer a pre-release; only a local one may point at files outside DLB's GitHub releases.
+            UpdateDecision decision = UpdateOffer.Decide(result.Release, installed, feed != null, localFeed);
             if (decision.Status == OfferStatus.UpToDate) ShowUpToDate(UpdaterProgram.VersionText(installed));
             else if (decision.Status == OfferStatus.NotAvailable) ShowError("This update isn't available yet. Try again later.", null);
             else ShowAvailable(decision.Offer);
@@ -177,8 +181,9 @@ namespace DlbPrecision.DesktopClock.Updater
                 {
                     using (var file = new FileStream(fresh, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                         Downloader.Download(new Uri(offer.Exe.DownloadUrl), file, offer.Exe.Size, localFeed,
-                            done => Dispatcher.BeginInvoke(new Action(() => ShowProgress(done, offer.Exe.Size))), token, userAgent);
+                            done => Dispatcher.BeginInvoke(new Action(() => ShowProgress(done, offer.Exe.Size))), token);
                 });
+                token.ThrowIfCancellationRequested();   // cancelled just as the download finished
                 cancel = null;
 
                 ShowVerifying();
@@ -189,7 +194,6 @@ namespace DlbPrecision.DesktopClock.Updater
                 });
                 if (!verdict.Ok)
                 {
-                    Discard(fresh);
                     ShowError(verdict.Reason, verdict.Retryable ? retry : null);
                     return;
                 }
@@ -200,19 +204,24 @@ namespace DlbPrecision.DesktopClock.Updater
                 if (swap.Outcome == SwapOutcome.Updated) Close();
                 else ShowResult(swap.Message);
             }
-            catch (OperationCanceledException) { Discard(fresh); ShowAvailable(offer); }
-            catch (InvalidDataException error) { Discard(fresh); ShowError(error.Message, retry); }
-            catch (WebException) { Discard(fresh); ShowError(ReleaseFeed.NetworkMessage, retry); }
-            catch (IOException error) { Discard(fresh); ShowError("Couldn't save the update next to the clock (" + error.Message.TrimEnd('.') + ").", retry); }
-            catch (UnauthorizedAccessException error) { Discard(fresh); ShowError("Couldn't save the update next to the clock (" + error.Message.TrimEnd('.') + ").", retry); }
-            finally { cancel = null; }
+            catch (OperationCanceledException) { if (!closeWhenStopped) ShowAvailable(offer); }
+            catch (InvalidDataException error) { ShowError(error.Message, retry); }
+            catch (WebException) { ShowError(ReleaseFeed.NetworkMessage, retry); }
+            catch (IOException error) { ShowError(CouldNotSave(error), retry); }
+            catch (UnauthorizedAccessException error) { ShowError(CouldNotSave(error), retry); }
+            finally
+            {
+                cancel = null;
+                ClockSwapper.TryDelete(fresh);   // a partial or refused download; after a swap there is nothing left to remove
+            }
+            if (closeWhenStopped) Close();
         }
 
         private string DownloadChecksum(UpdateOffer offer, CancellationToken token)
         {
             using (var text = new MemoryStream())
             {
-                Downloader.Download(new Uri(offer.Checksum.DownloadUrl), text, offer.Checksum.Size, localFeed, null, token, userAgent);
+                Downloader.Download(new Uri(offer.Checksum.DownloadUrl), text, offer.Checksum.Size, localFeed, null, token);
                 string sha256;
                 if (!ChecksumFile.TryParse(Encoding.UTF8.GetString(text.ToArray()), UpdateOffer.ExeName, out sha256))
                     throw new InvalidDataException("The update's checksum file couldn't be read.");
@@ -220,11 +229,9 @@ namespace DlbPrecision.DesktopClock.Updater
             }
         }
 
-        private static void Discard(string path)
+        private static string CouldNotSave(Exception error)
         {
-            try { File.Delete(path); }
-            catch (IOException) { /* Removed by the next update. */ }
-            catch (UnauthorizedAccessException) { }
+            return "Couldn't save the update next to the clock (" + error.Message.TrimEnd('.') + ").";
         }
     }
 }

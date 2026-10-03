@@ -81,19 +81,15 @@ namespace DlbPrecision.DesktopClock.Updater
         }
 
         // One request per check. A local file is accepted only as an explicit --feed for testing.
-        public static FeedResult Fetch(string source, string userAgent)
+        public static FeedResult Fetch(string source)
         {
             try
             {
                 if (IsLocal(source)) return FetchLocal(source);
                 var uri = new Uri(source);
                 if (uri.Scheme != Uri.UriSchemeHttps) return FeedResult.Failed("Updates are only checked over a secure connection.");
-                var request = (HttpWebRequest)WebRequest.Create(uri);
-                request.UserAgent = userAgent;
+                HttpWebRequest request = Downloader.CreateRequest(uri, TimeoutMilliseconds);
                 request.Accept = "application/vnd.github+json";
-                request.Timeout = TimeoutMilliseconds;
-                request.ReadWriteTimeout = TimeoutMilliseconds;
-                Downloader.UseSignInForProxy(request);
                 using (var response = (HttpWebResponse)request.GetResponse())
                 using (var body = new MemoryStream())
                 {

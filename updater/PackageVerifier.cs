@@ -19,7 +19,7 @@ namespace DlbPrecision.DesktopClock.Updater
         public static bool TryParse(string text, string expectedFileName, out string sha256)
         {
             sha256 = "";
-            string first = text.TrimStart('﻿').Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            string first = text.TrimStart('\uFEFF').Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
             Match match = Line.Match(first);
             if (!match.Success) return false;
             if (match.Groups[2].Success && !string.Equals(match.Groups[2].Value.Trim(), expectedFileName, StringComparison.OrdinalIgnoreCase)) return false;
@@ -114,8 +114,9 @@ namespace DlbPrecision.DesktopClock.Updater
             return RevocationUnavailable.Contains(code);
         }
 
-        // The caller opens the file with writes and deletes blocked and keeps it open until the clock has been
-        // swapped, so the bytes checked here are the bytes that end up installed.
+        // The caller opens the file with writes blocked, so it can't change while it is checked. It is closed again
+        // before the swap: anything that could change it then could just as well replace the installed clock,
+        // which lives in the same folder.
         public static VerificationResult Verify(FileStream package, string path, string expectedSha256, string expectedProductVersion)
         {
             package.Position = 0;

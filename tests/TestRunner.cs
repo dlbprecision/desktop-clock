@@ -59,8 +59,7 @@ namespace DlbPrecision.DesktopClock.Tests
         public TestContext(string fakeClock)
         {
             FakeClock = fakeClock;
-            // Never the updater's own DLBPrecision-DesktopClock-Update- prefix, so the code under test can't mistake it.
-            Scratch = Path.Combine(Path.GetTempPath(), "DLBPrecision-DesktopClock-Tests-" + Guid.NewGuid().ToString("N"));
+            Scratch =Path.Combine(Path.GetTempPath(), "DLBPrecision-DesktopClock-Tests-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Scratch);
         }
 
@@ -97,7 +96,7 @@ namespace DlbPrecision.DesktopClock.Tests
         public static Process StartAndWaitForWindow(string exe, int milliseconds)
         {
             Process process = Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) });
-            WaitFor(() => NativeMethods.WindowsOf(process.Id, "DLB Precision Desktop Clock").Count > 0 || process.HasExited, milliseconds);
+            WaitFor(() => NativeMethods.WindowsOf(process.Id, Updater.ClockSwapper.WindowTitle).Count > 0 || process.HasExited, milliseconds);
             return process;
         }
 

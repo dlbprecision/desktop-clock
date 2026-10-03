@@ -5,7 +5,7 @@ using System.Threading;
 
 namespace DlbPrecision.DesktopClock.Updater
 {
-    internal enum SwapOutcome { Updated, RolledBack, NotReplaced }
+    internal enum SwapOutcome { Updated, RolledBack, RollbackFailed, NotReplaced }
 
     internal sealed class SwapResult
     {
@@ -38,14 +38,14 @@ namespace DlbPrecision.DesktopClock.Updater
         public static string NewPath(string exe) { return exe + ".new"; }
         public static string OldPath(string exe) { return exe + ".old"; }
 
-        // Before an update: tidy up after an interrupted one. If it stopped between its two renames, the backup is the clock.
+        // Before an update: remove what an interrupted one left behind.
         public static void RemoveLeftovers(string exe)
         {
-            if (!File.Exists(exe) && File.Exists(OldPath(exe))) File.Move(OldPath(exe), exe);
             TryDelete(NewPath(exe));
             TryDelete(OldPath(exe));
         }
 
+        // Never throws: every outcome comes back as a message to show.
         public SwapResult Replace(string exe)
         {
             string fresh = NewPath(exe), backup = OldPath(exe);
@@ -65,27 +65,38 @@ namespace DlbPrecision.DesktopClock.Updater
                 return new SwapResult(SwapOutcome.Updated, "Updated.");
             }
 
-            // Safety net: the new version didn't start, so the previous one goes back.
+            // Safety net: the new version didn't start, so the previous one goes back. The new file is renamed aside,
+            // not deleted, which works even while the stopped process or a virus scan still has it open.
             Stop(started);
-            for (int attempt = 0; attempt < 20 && File.Exists(exe); attempt++) { TryDelete(exe); if (File.Exists(exe)) Thread.Sleep(100); }
-            File.Move(backup, exe);
-            Start(exe);
-            return new SwapResult(SwapOutcome.RolledBack, "The new version didn't start, so the previous version was put back.");
+            problem = Rename(exe, backup, fresh);
+            if (problem != null)
+                return new SwapResult(SwapOutcome.RollbackFailed, "The new version didn't start, and the previous version couldn't be put back ("
+                    + problem.TrimEnd('.') + "). It is saved next to the clock as " + Path.GetFileName(backup) + ".");
+            TryDelete(fresh);
+            return new SwapResult(SwapOutcome.RolledBack, Start(exe) != null
+                ? "The new version didn't start, so the previous version was put back."
+                : "The new version didn't start, so the previous version was put back. Start it again from its folder.");
         }
 
-        // exe -> backup, then fresh -> exe. Returns null, or why it couldn't, with exe back as it was.
-        private static string Rename(string exe, string fresh, string backup)
+        // Moves exe aside, then replacement into its place. Returns null, or why it couldn't, after putting exe back.
+        private static string Rename(string exe, string replacement, string aside)
         {
-            try { File.Move(exe, backup); }
-            catch (IOException error) { return error.Message; }
-            catch (UnauthorizedAccessException error) { return error.Message; }
+            string problem = Move(exe, aside);
+            if (problem != null) return problem;
+            problem = Move(replacement, exe);
+            if (problem != null) Move(aside, exe);
+            return problem;
+        }
+
+        private static string Move(string from, string to)
+        {
             try
             {
-                File.Move(fresh, exe);
+                File.Move(from, to);
                 return null;
             }
-            catch (IOException error) { File.Move(backup, exe); return error.Message; }
-            catch (UnauthorizedAccessException error) { File.Move(backup, exe); return error.Message; }
+            catch (IOException error) { return error.Message; }
+            catch (UnauthorizedAccessException error) { return error.Message; }
         }
 
         // Asks every clock started from this exe to close the normal way, so it saves its settings, and stops any
@@ -148,7 +159,7 @@ namespace DlbPrecision.DesktopClock.Updater
             catch (System.ComponentModel.Win32Exception) { /* Exiting already. */ }
         }
 
-        private static void TryDelete(string path)
+        internal static void TryDelete(string path)
         {
             try
             {

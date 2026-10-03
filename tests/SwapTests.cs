@@ -63,9 +63,17 @@ namespace DlbPrecision.DesktopClock.Tests
             ClockSwapper.RemoveLeftovers(exe);
             t.Check(File.ReadAllText(exe) == "clock" && !File.Exists(ClockSwapper.NewPath(exe)) && !File.Exists(ClockSwapper.OldPath(exe)),
                 "Leftovers from an interrupted update are removed");
-            File.Move(exe, ClockSwapper.OldPath(exe));
-            ClockSwapper.RemoveLeftovers(exe);
-            t.Check(File.ReadAllText(exe) == "clock", "An update interrupted between its two renames gets its clock back");
+
+            // As in use: the updater is a second process started from the clock's own file.
+            s = Prepare(t, "from-clock", "ok", "ok", true);
+            t.Check(SwapFromClock(s) == "Updated" && Sha256(s.Exe) == s.NewSha && ClocksRunningFrom(s.Exe) == 1
+                && File.ReadAllText(Path.Combine(s.Folder, "closed.txt")).Contains(s.Old.Id.ToString()),
+                "Run from the clock's own file, the updater closes the clock, not itself, and installs the new one");
+            t.Check(File.Exists(ClockSwapper.OldPath(s.Exe)), "...and <exe>.old, which it ran from, is left for the new clock to delete");
+
+            s = Prepare(t, "from-clock-rollback", "ok", "nowindow", true);
+            t.Check(SwapFromClock(s) == "RolledBack" && Sha256(s.Exe) == s.OldSha && ClocksRunningFrom(s.Exe) == 1,
+                "Run from the clock's own file, a failed update puts that same file back and restarts it");
 
             // The updater runs from the clock's own file and renames it out of the way, so Windows must allow that.
             s = Prepare(t, "running", "nowindow", "ok", false);
@@ -107,9 +115,18 @@ namespace DlbPrecision.DesktopClock.Tests
             return s;
         }
 
+        // A cold start of a freshly copied exe can be slow while antivirus scans it, so allow 10 s (15 s in use).
         private static SwapResult Swap(Setup s)
         {
-            return new ClockSwapper { CloseWaitMilliseconds = 2000, StartWaitMilliseconds = 4000 }.Replace(s.Exe);
+            return new ClockSwapper { CloseWaitMilliseconds = 2000, StartWaitMilliseconds = 10000 }.Replace(s.Exe);
+        }
+
+        private static string SwapFromClock(Setup s)
+        {
+            using (Process swapper = Process.Start(new ProcessStartInfo(s.Exe, "--swap 2000 10000") { UseShellExecute = false }))
+                if (!swapper.WaitForExit(30000)) return "(still running)";
+            string result = Path.Combine(s.Folder, "swap.txt");
+            return File.Exists(result) ? File.ReadAllText(result) : "(no result)";
         }
 
         private static bool NoLeftovers(Setup s)

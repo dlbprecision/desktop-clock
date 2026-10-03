@@ -33,8 +33,9 @@ namespace DlbPrecision.DesktopClock.Updater
                     return 0;
                 }
                 ReleaseFeed.UseSystemTls();
-                new Application().Run(new UpdaterWindow(Assembly.GetEntryAssembly().Location, feed, true));
-                GC.KeepAlive(instance);
+                var window = new UpdaterWindow(Assembly.GetEntryAssembly().Location, feed);
+                window.Loaded += delegate { window.Check(); };
+                new Application().Run(window);
             }
             return 0;
         }

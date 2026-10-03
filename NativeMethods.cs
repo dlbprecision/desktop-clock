@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
-// The updater runs from a temporary folder; Windows libraries must only ever come from System32.
+// The clock and its updater run from a folder the user can write to; Windows libraries must only ever come from System32.
 [assembly: DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
 namespace DlbPrecision.DesktopClock

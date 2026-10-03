@@ -45,7 +45,7 @@ namespace DlbPrecision.DesktopClock.Tests
                 "A sha256sum line for the clock is read, in any letter case");
             t.Check(ChecksumFile.TryParse(hex, UpdateOffer.ExeName, out sha), "A bare hash is read");
             t.Check(ChecksumFile.TryParse(hex + " *DlbPrecision.DesktopClock.exe", UpdateOffer.ExeName, out sha), "Binary-mode markers are allowed");
-            t.Check(ChecksumFile.TryParse("﻿" + hex + "\r\n", UpdateOffer.ExeName, out sha), "A byte-order mark is ignored");
+            t.Check(ChecksumFile.TryParse("\uFEFF" + hex + "\r\n", UpdateOffer.ExeName, out sha), "A byte-order mark is ignored");
             t.Check(!ChecksumFile.TryParse(hex + "  Other.exe", UpdateOffer.ExeName, out sha), "A checksum for another file is refused");
             t.Check(!ChecksumFile.TryParse(hex.Substring(1), UpdateOffer.ExeName, out sha), "A short hash is refused");
             t.Check(!ChecksumFile.TryParse(new string('g', 64), UpdateOffer.ExeName, out sha) && !ChecksumFile.TryParse("", UpdateOffer.ExeName, out sha),
