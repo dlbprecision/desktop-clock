@@ -1,8 +1,10 @@
-// Stand-in clock for the tests, copied under whatever exe name a test needs. It reads mode.txt beside
-// itself: "ok" shows a window until it is closed, "hang" shows one that refuses to close, "nowindow" runs
-// without a window, "crash" exits at once with code 3. Every start appends "<pid> <mode>" to started.txt
-// beside it, and a normal close appends "<pid>" to closed.txt. Windows open far off-screen and never take
-// focus, and every mode exits by itself after two minutes, so a failed test can't leave one behind.
+// Stand-in clock for the tests, copied under whatever exe name a test needs. It reads its mode from
+// mode.<its own file size>.txt beside it, else mode.txt: "ok" shows a window until it is closed, "hang"
+// shows one that refuses to close, "nowindow" runs without a window, "crash" exits at once with code 3.
+// (Swap tests tell an "old" and a "new" copy apart by appending bytes to one, which Windows ignores.)
+// Every start appends "<pid> <mode>" to started.txt beside it, and a normal close appends "<pid>" to
+// closed.txt. Windows open far off-screen and never take focus, and every mode exits by itself after two
+// minutes, so a failed test can't leave one behind.
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -18,11 +20,13 @@ namespace DlbPrecision.DesktopClock.Tests
         [STAThread]
         private static int Main()
         {
-            string folder = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
-            string modeFile = Path.Combine(folder, "mode.txt");
+            string self = Assembly.GetEntryAssembly().Location;
+            string folder = Path.GetDirectoryName(self);
+            string ownModeFile = Path.Combine(folder, "mode." + new FileInfo(self).Length + ".txt");
+            string modeFile = File.Exists(ownModeFile) ? ownModeFile : Path.Combine(folder, "mode.txt");
             string mode = File.Exists(modeFile) ? File.ReadAllText(modeFile).Trim() : "ok";
-            int self = Process.GetCurrentProcess().Id;
-            File.AppendAllText(Path.Combine(folder, "started.txt"), self + " " + mode + Environment.NewLine);
+            int pid = Process.GetCurrentProcess().Id;
+            File.AppendAllText(Path.Combine(folder, "started.txt"), pid + " " + mode + Environment.NewLine);
             if (mode == "crash") return 3;
             if (mode == "nowindow")
             {
@@ -48,7 +52,7 @@ namespace DlbPrecision.DesktopClock.Tests
             limit.Tick += delegate { Environment.Exit(0); };
             limit.Start();
             app.Run(window);
-            File.AppendAllText(Path.Combine(folder, "closed.txt"), self + Environment.NewLine);
+            File.AppendAllText(Path.Combine(folder, "closed.txt"), pid + Environment.NewLine);
             return 0;
         }
     }
