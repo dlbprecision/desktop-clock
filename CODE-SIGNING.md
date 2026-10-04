@@ -66,9 +66,11 @@ The signing identity comes from the Azure CLI sign-in (`az login` in a browser, 
 5. Merge the release's code into `main`, then edit the release: untick pre-release and tick
    **Set as the latest release**. That is when clocks are offered it.
 
-To pull back a bad release, mark it as a pre-release again and fix forward, but never let Latest fall
-back to v1.2 or older: those tags (`v1.0` to `v1.2`) predate the updater, and a 1.3.0 clock reports
-"This update isn't available yet" instead of "You're up to date" while one of them is Latest.
+To pull back a bad release, mark it as a pre-release again and fix forward. Latest then falls back to
+the newest remaining release. If that is v1.2 or older (tags `v1.0` to `v1.2` predate the updater and
+aren't `vX.Y.Z`), clocks from 1.3.1 on say "You're up to date", but a 1.3.0 clock says "This update
+isn't available yet", so keep a 1.3 or newer release as Latest. A test feed (`--feed`) still reports a
+tag that isn't `vX.Y.Z` as not available, so a mistyped tag shows up in step 4.
 
 A local test build (`-Version 1.2.9.9 -TestBuild`) has a four-part version, so it sorts below the
 next release and can never be offered as one.
