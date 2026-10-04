@@ -69,7 +69,9 @@ namespace DlbPrecision.DesktopClock.Updater
         {
             if (release == null || release.Draft || (release.Prerelease && !allowPrerelease)) return UpdateDecision.UpToDate();
             Version version;
-            if (!TryParseTag(release.Tag, out version)) return UpdateDecision.NotAvailable();
+            // Latest may be a pre-updater release (v1.0 to v1.2), which is never newer. A test feed names its
+            // release on purpose, so there a mistyped tag is reported instead.
+            if (!TryParseTag(release.Tag, out version)) return allowPrerelease ? UpdateDecision.NotAvailable() : UpdateDecision.UpToDate();
             if (Normalize(version) <= Normalize(installed)) return UpdateDecision.UpToDate();
 
             ReleaseAsset exe = release.Assets.FirstOrDefault(asset => asset.Name == ExeName);

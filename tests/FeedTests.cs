@@ -49,9 +49,13 @@ namespace DlbPrecision.DesktopClock.Tests
             t.Check(Status(Release("v1.3.1", draft: true), prerelease: true) == OfferStatus.UpToDate, "Drafts are never offered");
             t.Check(Status(Release("v1.3.1", prerelease: true)) == OfferStatus.UpToDate, "Pre-releases are not offered on the real channel");
             t.Check(Status(Release("v1.3.1", prerelease: true), prerelease: true) == OfferStatus.Available, "A test feed may offer a pre-release");
+            t.Check(Status(Release("v1.2")) == OfferStatus.UpToDate, "A pre-updater release (v1.0 to v1.2) as Latest means up to date");
             foreach (string tag in new[] { "1.3.1", "v1.3", "V1.3.1", "v1.3.1-beta", "v1.3.1.0", "v\u0661.\u0663.\u0661", "", null })
-                t.Check(Status(Release(tag, urlTag: "v1.3.1")) == OfferStatus.NotAvailable,
-                    "Tag '" + (tag ?? "(missing)") + "' is not vMAJOR.MINOR.PATCH and is refused");
+            {
+                string name = "Tag '" + (tag ?? "(missing)") + "' is not vMAJOR.MINOR.PATCH, ";
+                t.Check(Status(Release(tag, urlTag: "v1.3.1")) == OfferStatus.UpToDate, name + "so the real channel offers nothing");
+                t.Check(Status(Release(tag, urlTag: "v1.3.1"), prerelease: true) == OfferStatus.NotAvailable, name + "so a test feed says it isn't available");
+            }
             t.Check(Status(Release("v1.3.1", checksum: false)) == OfferStatus.NotAvailable, "A release without its checksum file is refused");
             t.Check(Status(Release("v1.3.1", exe: false)) == OfferStatus.NotAvailable, "A release without the clock is refused");
             t.Check(Status(Release("v1.3.1", exeName: "ChevyClock.exe")) == OfferStatus.NotAvailable, "The old Chevy Clock file name is not the clock");
