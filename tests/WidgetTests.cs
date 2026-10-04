@@ -23,11 +23,12 @@ namespace DlbPrecision.DesktopClock.Tests
             MethodBase[] callers = Callers(typeof(UpdateLauncher).GetMethod("Start"));
             t.Check(callers.Length == 1 && callers[0].Name.StartsWith("<BuildMenu>")
                 && (callers[0].DeclaringType.DeclaringType ?? callers[0].DeclaringType) == typeof(ClockWindow),
-                "Only the menu's Check for updates… handler starts the updater, never startup or a timer (callers: "
+                "Only one menu handler built in BuildMenu starts the updater, nothing at startup (callers: "
                 + string.Join(", ", callers.Select(method => method.DeclaringType.Name + "." + method.Name)) + ")");
         }
 
         // Product methods whose compiled code refers to the target method, found by its metadata token in their IL.
+        // A plain byte scan: a stray match adds a caller and fails loudly, it can't hide one.
         private static MethodBase[] Callers(MethodBase target)
         {
             const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;

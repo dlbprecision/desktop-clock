@@ -69,7 +69,7 @@ The signing identity comes from the Azure CLI sign-in (`az login` in a browser, 
 To pull back a bad release, mark it as a pre-release again and fix forward. Latest then falls back to
 the newest remaining release. If that is v1.2 or older (tags `v1.0` to `v1.2` predate the updater and
 aren't `vX.Y.Z`), clocks from 1.3.1 on say "You're up to date", but a 1.3.0 clock says "This update
-isn't available yet", so keep a 1.3 or newer release as Latest. A test feed (`--feed`) still reports a
+isn't available yet", so keep v1.3.0 or newer as Latest. A test feed (`--feed`) still reports a
 tag that isn't `vX.Y.Z` as not available, so a mistyped tag shows up in step 4.
 
 A local test build (`-Version 1.2.9.9 -TestBuild`) has a four-part version, so it sorts below the
