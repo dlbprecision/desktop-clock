@@ -1,18 +1,20 @@
-# Chevy Clock
+# DLB Precision Desktop Clock
 
 A transparent, resizable digital clock widget for Windows 11, in Chevrolet Rapid Blue, purple, or
 DLB Precision colors.
 
-![Chevy Clock on the desktop](screenshot.png)
+![DLB Precision Desktop Clock on the desktop](screenshot.png)
 
 No installer, no runtime to ship, no dependencies — it compiles with the C# compiler that is
-already inside Windows and produces a single ~22 KB `.exe`.
+already inside Windows and produces a single `.exe` under 100 KB. Releases are signed by
+DLB Precision, LLC.
 
 - **16 MB** working set, **0.00% CPU** at idle (it sleeps between ticks and wakes aligned to the
   second boundary, so it never drifts and never busy-loops)
 - Genuinely transparent background — no black box, no fake-wallpaper trick
 - Always on top, hidden from Alt+Tab and the taskbar
 - Remembers its exact position, size, and color across restarts and reboots
+- Updates itself from the right-click menu, installing only builds signed by DLB Precision, LLC
 
 ## Colors
 
@@ -28,10 +30,24 @@ Right-click → **Color** to switch. The choice is remembered.
 
 ## Download
 
-Grab `ChevyClock.exe` from the [latest release](../../releases/latest), drop it in a folder it
-can live in permanently, and double-click it. It registers itself to start with Windows on that
-first run. The `.exe` is not code-signed, so SmartScreen will show "Windows protected your PC"
-the first time — click **More info → Run anyway**.
+Grab `DlbPrecision.DesktopClock.exe` from the [latest release](../../releases/latest), drop it in a
+folder it can live in permanently, and double-click it. It registers itself to start with Windows
+on that first run. If SmartScreen still warns about a new download, click **More info**: the
+publisher shows as DLB Precision, LLC.
+
+**Coming from Chevy Clock (1.2 or older)?** Download the new exe and double-click it. It closes the
+old clock and takes over its position, size, color and Start with Windows setting. Then delete
+`ChevyClock.exe`. This is the last manual update.
+
+## Updating
+
+Right-click → **Check for updates…**. If a newer version is out, the clock shows what's new;
+**Update now** downloads it, checks it is genuine, swaps it in and restarts the clock where it was.
+
+- The clock contacts GitHub only when you click **Check for updates…**. Nothing runs in the background.
+- It installs only a file signed by DLB Precision, LLC whose checksum, version and product name all
+  match the release. Anything else is refused and nothing changes.
+- If the new version doesn't start, the previous one is put back automatically.
 
 ## Build
 
@@ -41,8 +57,10 @@ Or build it yourself. Clone the repo, then:
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-That compiles `ChevyClock.exe` next to the script, registers it to start with Windows, and
-launches it. Flags: `-NoStartup` skips the startup registration, `-NoLaunch` skips launching.
+That compiles `DlbPrecision.DesktopClock.exe` next to the script and starts it; the clock adds
+itself to Start with Windows when it runs. `-NoLaunch` builds without starting it. The version
+comes from the `VERSION` file; tests run with `.\test.ps1`. Signed releases are covered in
+[CODE-SIGNING.md](CODE-SIGNING.md).
 
 The build uses `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, which ships with
 Windows 10 and 11. Nothing needs to be installed.
@@ -57,6 +75,7 @@ Windows 10 and 11. Nothing needs to be installed.
 | Change color | Right-click → Color → Rapid Blue / Purple / DLB Precision |
 | Freeze it | Right-click → Lock position |
 | Start with Windows | Right-click → Start with Windows |
+| Update | Right-click → Check for updates… |
 | Quit | Right-click → Exit |
 
 The window is invisible apart from the digits, so a faint outline in the clock's color appears
@@ -68,8 +87,8 @@ proportion.
 
 | What | Where |
 | --- | --- |
-| Position, size, color, lock state | `%APPDATA%\ChevyClock\settings.ini` |
-| Start-with-Windows entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` → `ChevyClock` |
+| Position, size, color, lock state | `%LOCALAPPDATA%\DLBPrecision\DesktopClock\settings.ini` |
+| Start-with-Windows entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` → `DLBPrecisionDesktopClock` |
 
 Settings are written ~0.7 s after you stop dragging, and again on exit and on Windows shutdown.
 Only *your* moves count: if Windows shoves the window onto another screen because a monitor
@@ -84,11 +103,12 @@ removed. So running the `.exe` once is enough to install it.
 ## Uninstall
 
 Right-click → untick **Start with Windows**, right-click → **Exit**, then delete the folder and
-`%APPDATA%\ChevyClock`.
+`%LOCALAPPDATA%\DLBPrecision\DesktopClock` (and `%APPDATA%\ChevyClock`, if it's left over from
+Chevy Clock 1.2 or older).
 
 ## Customizing
 
-Everything worth changing is at the top of [`ChevyClock.cs`](ChevyClock.cs):
+Everything worth changing is at the top of [`DesktopClock.cs`](DesktopClock.cs):
 
 | Constant | Does |
 | --- | --- |

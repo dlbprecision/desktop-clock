@@ -1,3 +1,11 @@
 # Build output — attach the .exe to a GitHub Release instead of committing it
 *.exe
 *.pdb
+!tests/fixtures/*.exe
+obj/
+artifacts/
+tests/bin/
+
+# Local only: signing tool paths for this PC, and planning notes
+signing.local.json
+.planning/

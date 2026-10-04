@@ -1,0 +1,275 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Security.Cryptography.Pkcs;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Text.RegularExpressions;
+
+namespace DlbPrecision.DesktopClock.Updater
+{
+    internal static class ChecksumFile
+    {
+        public const int MaximumBytes = 4096;
+        private static readonly Regex Line = new Regex(@"^\s*([0-9A-Fa-f]{64})(?:\s+\*?(.+?))?\s*$", RegexOptions.CultureInvariant);
+
+        public static bool TryParse(string text, string expectedFileName, out string sha256)
+        {
+            sha256 = "";
+            string first = text.TrimStart('\uFEFF').Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            Match match = Line.Match(first);
+            if (!match.Success) return false;
+            if (match.Groups[2].Success && !string.Equals(match.Groups[2].Value.Trim(), expectedFileName, StringComparison.OrdinalIgnoreCase)) return false;
+            sha256 = match.Groups[1].Value.ToLowerInvariant();
+            return true;
+        }
+    }
+
+    internal sealed class SignatureFacts
+    {
+        public SignatureFacts()
+        {
+            ChainCommonNames = new List<string>();
+        }
+
+        public string SignerCommonName { get; set; }
+        public string SignerOrganization { get; set; }
+        public string SignerState { get; set; }
+        public string SignerCountry { get; set; }
+        public List<string> ChainCommonNames { get; set; }
+        public bool CodeSigning { get; set; }
+        public bool Timestamped { get; set; }
+        public bool SingleSigner { get; set; }
+        public bool SignatureValid { get; set; }
+        public bool ChainTrusted { get; set; }
+        public string RootThumbprint { get; set; }
+    }
+
+    // The same identity and root the DLB Precision Monitor's updater requires. Fixed in every installed copy.
+    internal static class PublisherPolicy
+    {
+        public const string Publisher = "DLB Precision, LLC";
+        // A company name is unique only within the state that registered it, so the state and country identify
+        // DLB's own validated identity, not just a business with the same name.
+        public const string PublisherState = "Arkansas";
+        public const string PublisherCountry = "US";
+        // Artifact Signing issues DLB's short-lived certificates under this root (valid until 2045). The root is
+        // pinned rather than the leaf, which changes every few days.
+        public const string MicrosoftIdentityRoot = "Microsoft Identity Verification Root Certificate Authority 2020";
+        public const string MicrosoftIdentityRootThumbprint = "F40042E2E5F7E8EF8189FED15519AECE42C3BFA2";
+
+        public static string Evaluate(SignatureFacts facts)
+        {
+            if (!facts.SingleSigner || !facts.SignatureValid)
+                return "The download's signature is not a single valid signature, so it wasn't installed.";
+            if (!string.Equals(facts.SignerCommonName, Publisher, StringComparison.Ordinal)
+                || !string.Equals(facts.SignerOrganization, Publisher, StringComparison.Ordinal))
+                return "The download is signed by another publisher (" + (facts.SignerCommonName ?? "unknown") + "), not " + Publisher + ".";
+            if (!string.Equals(facts.SignerState, PublisherState, StringComparison.Ordinal)
+                || !string.Equals(facts.SignerCountry, PublisherCountry, StringComparison.Ordinal))
+                return "The download is signed by a " + Publisher + " registered in " + (facts.SignerState ?? "an unknown state") + ", "
+                    + (facts.SignerCountry ?? "unknown country") + ", not DLB's own (" + PublisherState + ", " + PublisherCountry + ").";
+            // A name alone proves nothing: the chain must be one Windows trusts, ending at the pinned root.
+            if (!facts.ChainTrusted || facts.ChainCommonNames.LastOrDefault() != MicrosoftIdentityRoot
+                || !string.Equals(facts.RootThumbprint, MicrosoftIdentityRootThumbprint, StringComparison.OrdinalIgnoreCase))
+                return "The DLB signature was not issued through Microsoft's identity-verified signing service.";
+            if (!facts.CodeSigning) return "The signing certificate is not for code signing.";
+            if (!facts.Timestamped) return "The signature has no timestamp.";
+            return null;
+        }
+    }
+
+    internal sealed class VerificationResult
+    {
+        private VerificationResult(bool ok, string reason, bool retryable)
+        {
+            Ok = ok;
+            Reason = reason;
+            Retryable = retryable;
+        }
+
+        public bool Ok { get; private set; }
+        public string Reason { get; private set; }
+        public bool Retryable { get; private set; }
+
+        internal static VerificationResult Accepted() { return new VerificationResult(true, "", false); }
+        internal static VerificationResult Rejected(string reason) { return new VerificationResult(false, reason, false); }
+        internal static VerificationResult RejectedRetryable(string reason) { return new VerificationResult(false, reason, true); }
+    }
+
+    internal static class PackageVerifier
+    {
+        public const string Product = "DLB Precision Desktop Clock";
+        private const string CodeSigningUsage = "1.3.6.1.5.5.7.3.3";
+        private const string Rfc3161Timestamp = "1.3.6.1.4.1.311.3.3.1";
+        private const string LegacyCounterSignature = "1.2.840.113549.1.9.6";
+        // Revocation could not be checked (offline, or Microsoft's service unreachable). Refused, but worth a retry.
+        private static readonly int[] RevocationUnavailable = { unchecked((int)0x80092013), unchecked((int)0x80092012), unchecked((int)0x800B010E) };
+
+        public static bool IsRevocationUnavailable(int code)
+        {
+            return RevocationUnavailable.Contains(code);
+        }
+
+        // The caller opens the file with writes blocked, so it can't change while it is checked. It is closed again
+        // before the swap: anything that could change it then could just as well replace the installed clock,
+        // which lives in the same folder.
+        public static VerificationResult Verify(FileStream package, string path, string expectedSha256, string expectedProductVersion)
+        {
+            package.Position = 0;
+            string actual;
+            using (var sha = SHA256.Create())
+                actual = BitConverter.ToString(sha.ComputeHash(package)).Replace("-", "").ToLowerInvariant();
+            if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                return VerificationResult.Rejected("The download doesn't match its checksum, so it wasn't installed.");
+
+            int trust = NativeMethods.VerifyEmbeddedSignature(path, package.SafeFileHandle);
+            if (IsRevocationUnavailable(trust))
+                return VerificationResult.RejectedRetryable("Couldn't confirm with Microsoft that the signing certificate is still valid. Check your internet connection, then try again.");
+            if (trust != 0) return VerificationResult.Rejected("Windows could not verify the download's signature (0x" + trust.ToString("X8") + "), so it wasn't installed.");
+
+            SignatureFacts facts = ReadSignatureFacts(package);
+            if (facts == null) return VerificationResult.Rejected("The download's signature could not be read, so it wasn't installed.");
+            string refusal = PublisherPolicy.Evaluate(facts);
+            if (refusal != null) return VerificationResult.Rejected(refusal);
+
+            FileVersionInfo info = FileVersionInfo.GetVersionInfo(path);
+            string description = (info.FileDescription ?? "").Trim();
+            if (!string.Equals(description, Product, StringComparison.Ordinal) || !string.Equals((info.ProductName ?? "").Trim(), Product, StringComparison.Ordinal))
+                return VerificationResult.Rejected("The download is not the " + Product + " (it is \"" + description + "\"), so it wasn't installed.");
+            string product = (info.ProductVersion ?? "").Trim();
+            if (!string.Equals(product, expectedProductVersion, StringComparison.Ordinal))
+                return VerificationResult.Rejected("The download is version " + (product.Length > 0 ? product : "unknown") + ", not " + expectedProductVersion + ".");
+            return VerificationResult.Accepted();
+        }
+
+        // The release build runs this on the signed exe and its checksum file, so a release that every installed
+        // clock would refuse is caught before it is published.
+        public static VerificationResult VerifyPackage(string exePath, string version, bool testBuild)
+        {
+            Version parsed;
+            if (!testBuild && !UpdateOffer.TryParseTag("v" + version, out parsed))
+                return VerificationResult.Rejected("Version " + version + " can never be offered: release versions are MAJOR.MINOR.PATCH.");
+            if (!string.Equals(Path.GetFileName(exePath), UpdateOffer.ExeName, StringComparison.Ordinal))
+                return VerificationResult.Rejected("For version " + version + " the exe must be named " + UpdateOffer.ExeName + ".");
+            var exe = new FileInfo(exePath);
+            if (!exe.Exists || exe.Length > Downloader.MaximumBytes)
+                return VerificationResult.Rejected("The exe is missing or larger than the updater accepts (" + Downloader.MaximumBytes + " bytes).");
+            string checksumPath = exePath + ".sha256";
+            if (!File.Exists(checksumPath)) return VerificationResult.Rejected("The exe's checksum file " + UpdateOffer.ChecksumName + " is missing.");
+            string expected;
+            if (new FileInfo(checksumPath).Length > ChecksumFile.MaximumBytes
+                || !ChecksumFile.TryParse(File.ReadAllText(checksumPath), UpdateOffer.ExeName, out expected))
+                return VerificationResult.Rejected("The exe's checksum file couldn't be read.");
+            using (var package = new FileStream(exePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                return Verify(package, exePath, expected, version);
+        }
+
+        private static SignatureFacts ReadSignatureFacts(Stream package)
+        {
+            byte[] pkcs7 = ReadAuthenticodeBlob(package);
+            if (pkcs7 == null) return null;
+            try
+            {
+                var cms = new SignedCms();
+                cms.Decode(pkcs7);
+                if (cms.SignerInfos.Count == 0) return null;
+                SignerInfo signer = cms.SignerInfos[0];
+                X509Certificate2 certificate = signer.Certificate;
+                if (certificate == null) return null;
+                var facts = new SignatureFacts
+                {
+                    // With exactly one signer whose signature checks out under this certificate, the certificate judged
+                    // here is the one whose signature Windows verified against the file.
+                    SingleSigner = cms.SignerInfos.Count == 1,
+                    SignatureValid = SignatureChecks(signer),
+                    SignerCommonName = certificate.GetNameInfo(X509NameType.SimpleName, false),
+                    SignerOrganization = SubjectValue(certificate, "O"),
+                    SignerState = SubjectValue(certificate, "S"),
+                    SignerCountry = SubjectValue(certificate, "C"),
+                    CodeSigning = certificate.Extensions.OfType<X509EnhancedKeyUsageExtension>()
+                        .Any(usage => usage.EnhancedKeyUsages.Cast<Oid>().Any(oid => oid.Value == CodeSigningUsage)),
+                    Timestamped = signer.UnsignedAttributes.Cast<CryptographicAttributeObject>()
+                        .Any(attribute => attribute.Oid.Value == Rfc3161Timestamp || attribute.Oid.Value == LegacyCounterSignature)
+                };
+                using (var chain = new X509Chain())
+                {
+                    // Windows already checked revocation, and the short-lived leaf is expected to be past its end date
+                    // after a few days (the timestamp proves it was valid when signed). The chain must still build to a
+                    // root this PC trusts.
+                    chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+                    chain.ChainPolicy.VerificationFlags = X509VerificationFlags.IgnoreNotTimeValid;
+                    chain.ChainPolicy.ExtraStore.AddRange(cms.Certificates);
+                    facts.ChainTrusted = chain.Build(certificate);
+                    foreach (X509ChainElement element in chain.ChainElements)
+                        facts.ChainCommonNames.Add(element.Certificate.GetNameInfo(X509NameType.SimpleName, false));
+                    if (chain.ChainElements.Count > 0) facts.RootThumbprint = chain.ChainElements[chain.ChainElements.Count - 1].Certificate.Thumbprint;
+                }
+                return facts;
+            }
+            catch (CryptographicException)
+            {
+                return null;
+            }
+        }
+
+        private static bool SignatureChecks(SignerInfo signer)
+        {
+            try
+            {
+                signer.CheckSignature(true); // the signature only; certificate trust is judged by the chain
+                return true;
+            }
+            catch (CryptographicException)
+            {
+                return false;
+            }
+        }
+
+        private static string SubjectValue(X509Certificate2 certificate, string key)
+        {
+            // One RDN per line keeps a quoted "DLB Precision, LLC" intact.
+            foreach (string line in certificate.SubjectName.Decode(X500DistinguishedNameFlags.UseNewLines).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!line.StartsWith(key + "=", StringComparison.Ordinal)) continue;
+                string value = line.Substring(key.Length + 1).Trim();
+                if (value.Length >= 2 && value[0] == '"' && value[value.Length - 1] == '"') value = value.Substring(1, value.Length - 2).Replace("\"\"", "\"");
+                return value;
+            }
+            return null;
+        }
+
+        // Reads the PKCS#7 block from the PE security directory (an Authenticode-signed .exe).
+        private static byte[] ReadAuthenticodeBlob(Stream stream)
+        {
+            const int SecurityDirectory = 4;
+            const ushort Pe32 = 0x10B, Pe32Plus = 0x20B, PkcsSignedData = 2;
+            var reader = new BinaryReader(stream, Encoding.ASCII, true);
+            if (stream.Length < 0x40) return null;
+            stream.Position = 0;
+            if (reader.ReadUInt16() != 0x5A4D) return null;
+            stream.Position = 0x3C;
+            int peOffset = reader.ReadInt32();
+            if (peOffset <= 0 || peOffset > stream.Length - 0x100) return null;
+            stream.Position = peOffset;
+            if (reader.ReadUInt32() != 0x00004550) return null;
+            stream.Position = peOffset + 24;
+            ushort magic = reader.ReadUInt16();
+            long directories = magic == Pe32Plus ? peOffset + 24 + 112 : magic == Pe32 ? peOffset + 24 + 96 : -1;
+            if (directories < 0) return null;
+            stream.Position = directories + SecurityDirectory * 8;
+            uint offset = reader.ReadUInt32();
+            uint size = reader.ReadUInt32();
+            if (offset == 0 || size < 8 || size > 1024 * 1024 || offset + (long)size > stream.Length) return null;
+            stream.Position = offset;
+            uint length = reader.ReadUInt32();
+            reader.ReadUInt16();
+            ushort type = reader.ReadUInt16();
+            if (type != PkcsSignedData || length < 8 || length > size) return null;
+            return reader.ReadBytes((int)length - 8);
+        }
+    }
+}

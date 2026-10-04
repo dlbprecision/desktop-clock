@@ -1,8 +1,9 @@
-// Desktop clock widget for Windows 11 in Chevy Rapid Blue, purple, or DLB Precision colors.
-// Transparent rectangular always-on-top widget: drag to move, drag edges to resize,
-// right-click for options. Remembers position/size/color in %APPDATA%\ChevyClock\settings.ini.
+// DLB Precision Desktop Clock: a transparent, rectangular, always-on-top clock widget for Windows 11
+// in Rapid Blue, purple, or DLB Precision colors. Drag to move, drag edges to resize, right-click for
+// options. Remembers position/size/color in %LOCALAPPDATA%\DLBPrecision\DesktopClock\settings.ini.
 
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -18,7 +19,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using Microsoft.Win32;
 
-namespace ChevyClock
+namespace DlbPrecision.DesktopClock
 {
     public class ClockWindow : Window
     {
@@ -101,11 +102,12 @@ namespace ChevyClock
 
         // ---------- startup registration ----------
         const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string RunValueName = "ChevyClock";
+        internal const string RunValueName = "DLBPrecisionDesktopClock";
 
-        static readonly string SettingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "ChevyClock", "settings.ini");
+        // Window positions belong to this PC's monitors, so settings are local rather than roaming.
+        internal static readonly string SettingsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DLBPrecision", "DesktopClock", "settings.ini");
 
         readonly TextBlock text = new TextBlock();
         readonly Run timeRun = new Run("12:00:00");
@@ -129,12 +131,13 @@ namespace ChevyClock
 
         public ClockWindow()
         {
-            Title = "Chevy Clock";
+            Title = Updater.ClockSwapper.WindowTitle;   // the updater waits for this title after installing
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
             Background = Brushes.Transparent;   // transparent, but still catches the mouse
             ResizeMode = ResizeMode.CanResize;  // keeps the sizing frame; we hit-test it ourselves
             ShowInTaskbar = false;
+            ShowActivated = false;              // starting at sign-in or after an update never steals focus
             Topmost = true;
             WindowStartupLocation = WindowStartupLocation.Manual;
             UseLayoutRounding = true;
@@ -159,7 +162,16 @@ namespace ChevyClock
             tick.Tick += OnTick;
             UpdateTime();
             Schedule();
+
+            // After an update the previous version stays behind as <exe>.old until the updater, which runs from
+            // it, has exited. Try again shortly after starting.
+            DispatcherTimer tidy = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            tidy.Tick += delegate { tidy.Stop(); DeleteUpdateBackup(); };
+            tidy.Start();
         }
+
+        // Fails quietly while the updater still runs from it; the next start or update removes it.
+        static void DeleteUpdateBackup() { Updater.ClockSwapper.TryDelete(Updater.ClockSwapper.OldPath(ExePath())); }
 
         void BuildContent()
         {
@@ -280,6 +292,14 @@ namespace ChevyClock
                 colorItem.Items.Add(mi);
             }
 
+            MenuItem version = new MenuItem { Header = "Version " + Updater.UpdaterProgram.VersionText(Assembly.GetEntryAssembly().GetName().Version), IsEnabled = false };
+            MenuItem update = new MenuItem { Header = "Check for updates…" };
+            update.Click += delegate
+            {
+                string problem = UpdateLauncher.Start(ExePath(), delegate(ProcessStartInfo info) { using (Process.Start(info)) { } });
+                if (problem != null) MessageBox.Show(problem, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            };
+
             MenuItem quit = new MenuItem { Header = "Exit" };
             quit.Click += delegate { Close(); };
 
@@ -291,6 +311,9 @@ namespace ChevyClock
             menu.Items.Add(new Separator());
             menu.Items.Add(lockItem);
             menu.Items.Add(startupItem);
+            menu.Items.Add(new Separator());
+            menu.Items.Add(version);
+            menu.Items.Add(update);
             menu.Items.Add(new Separator());
             menu.Items.Add(quit);
             ContextMenu = menu;
@@ -620,16 +643,37 @@ namespace ChevyClock
         }
 
         [STAThread]
-        public static void Main()
+        public static int Main(string[] args)
         {
+            if (Updater.UpdaterProgram.IsUpdaterCommand(args)) return Updater.UpdaterProgram.Run(args);
             bool fresh;
-            using (Mutex one = new Mutex(true, "ChevyClockWidget.SingleInstance", out fresh))
+            using (Mutex one = new Mutex(true, "DLBPrecision.DesktopClock.Widget", out fresh))
             {
-                if (!fresh) return;                 // already running (e.g. launched twice at login)
+                if (!fresh) return 0;               // already running (e.g. launched twice at login)
+                LegacyMigration.Run(SettingsPath);  // before loading settings, so Chevy Clock's carry over
+                DeleteUpdateBackup();
                 Application app = new Application();
                 app.ShutdownMode = ShutdownMode.OnLastWindowClose;
                 app.Run(new ClockWindow());
                 GC.KeepAlive(one);
+            }
+            return 0;
+        }
+    }
+
+    // The clock only starts the updater; all internet, download and install work happens in that separate process.
+    internal static class UpdateLauncher
+    {
+        public static string Start(string exe, Action<ProcessStartInfo> start)
+        {
+            try
+            {
+                start(new ProcessStartInfo(exe, "--update") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) });
+                return null;
+            }
+            catch (System.ComponentModel.Win32Exception error)
+            {
+                return "The updater could not start: " + error.Message;
             }
         }
     }
