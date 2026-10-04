@@ -63,8 +63,12 @@ The signing identity comes from the Azure CLI sign-in (`az login` in a browser, 
    would refuse the file.
 3. On GitHub, publish tag `v1.3.1` as a **pre-release** with exactly those two files.
 4. Test it from a clock: `DlbPrecision.DesktopClock.exe --update --feed https://api.github.com/repos/dlbprecision/desktop-clock/releases/tags/v1.3.1`
-5. Edit the release: untick pre-release and tick **Set as the latest release**. That is when clocks
-   are offered it. To pull back a bad release, mark it as a pre-release again and fix forward.
+5. Merge the release's code into `main`, then edit the release: untick pre-release and tick
+   **Set as the latest release**. That is when clocks are offered it.
+
+To pull back a bad release, mark it as a pre-release again and fix forward, but never let Latest fall
+back to v1.2 or older: those tags (`v1.0` to `v1.2`) predate the updater, and a 1.3.0 clock reports
+"This update isn't available yet" instead of "You're up to date" while one of them is Latest.
 
 A local test build (`-Version 1.2.9.9 -TestBuild`) has a four-part version, so it sorts below the
 next release and can never be offered as one.
